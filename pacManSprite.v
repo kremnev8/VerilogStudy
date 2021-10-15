@@ -1,5 +1,5 @@
 
-module PacManSprite(animState, direction, yin, xin, out);
+module PacManBitmap(animState, direction, yin, xin, out);
   
   input animState;
   input [1:0] direction;  

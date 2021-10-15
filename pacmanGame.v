@@ -6,16 +6,16 @@
 `include "MapData.v"
 `include "mapCellsEvaluator.v"
 `include "cellStateCL.v"
-
 `include "pacManSprite.v"
+`include "animatedSprite.v"
+
+`include "pacmanController.v"
 
 
 
-/*
-Displays a grid of digits on the CRT using a RAM module.
-*/
 
-module test_ram1_top(clk, reset, hsync, vsync, rgb, init);
+
+module pacman_top(clk, reset, hsync, vsync, rgb, init);
 
   input clk, reset;
   
