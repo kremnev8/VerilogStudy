@@ -6,7 +6,7 @@
 `include "MapData.v"
 `include "mapCellsEvaluator.v"
 `include "cellStateCL.v"
-`include "pacManSprite.v"
+`include "pacManBitmap.v"
 `include "animatedSprite.v"
 
 `include "pacmanController.v"
