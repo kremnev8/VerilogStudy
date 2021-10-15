@@ -15,7 +15,7 @@
 
 
 
-module pacman_top(clk, reset, hsync, vsync, rgb, init);
+module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 
   input clk, reset;
   
@@ -31,9 +31,12 @@ module pacman_top(clk, reset, hsync, vsync, rgb, init);
   wire [7:0] ram_write;
   wire ram_writeenable;
   
+  input [7:0] keycode;
+  output reg keystrobe = 0;
+  
   reg [7:0] value = 0;
   
-  output wire init = 0;
+  wire init;
   
   // RAM to hold 32x32 array of bytes
   RAM_sync ram(
@@ -93,12 +96,38 @@ module pacman_top(clk, reset, hsync, vsync, rgb, init);
     .ready(init)
   );
   
+  wire [2:0] color;
+  reg [1:0] dir = 1;
+  
+  Pacman pacman(
+    .clk(clk),
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .col(color), 
+    .direction(dir)
+    
+  );
+  
 
   // extract bit from ROM output
   wire r = display_on && 0;
-  wire g = display_on && 0;
+  wire g = display_on && (color != 0);
   wire b = display_on && ( hpos < 10'h1e0 ? rom_bit : 1'b0);
   assign rgb = {b,g,r};
+  
+  always @(posedge clk) begin
+    if (keycode[7]) begin
+      case(keycode)
+        8'hf7: dir <= 0;
+        8'hf3: dir <= 2;
+        8'he1: dir <= 1;
+        8'he4: dir <= 3;
+        default:;
+      endcase
+      keystrobe <= 1;
+    end
+    
+  end
 
   // increment the current RAM cell
   /*always @(posedge clk) begin

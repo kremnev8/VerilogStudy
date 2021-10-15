@@ -11,7 +11,7 @@ module PacManBitmap(animState, direction, yin, xin, out);
   
   wire [7:0] caseexpr = {1'b0, direction, animState, yin};
   
-  assign out = pacman[caseexpr][~xpos];
+  assign out = pacman[caseexpr][~xin];
   
   initial begin
     /*{w:16,h:16,bpw:16,count:8}*/
