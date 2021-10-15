@@ -34,13 +34,13 @@ module tileMap(tileType, rotation, yin, xin, out);
   
   output out = bits[~xpos];
   
-  reg [7:0] bits;	// output (5 bits)
+  reg [7:0] bits;
 
   // combine {digit,yofs} into single ROM address
   wire [4:0] caseexpr = {tileType, ypos};
   
   always @(*)
-    case (caseexpr)/*{w:5,h:5,count:10}*/
+    case (caseexpr)/*{w:8,h:8,count:3}*/
       5'o10: bits = 8'b00010000;
       5'o11: bits = 8'b00010000;
       5'o12: bits = 8'b00010000;
