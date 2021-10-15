@@ -19,7 +19,8 @@ module CellState(in, out);
   wire br = in[8];
   
   always @(*) begin
-    if (!top && !bottom && right) out = {2'd0, 2'd1};
+    if (cel) out = 0;
+    else if (!top && !bottom && right) out = {2'd0, 2'd1};
     else if (!left && !right && top) out = {2'd1, 2'd1};
     else if (!top && !bottom && left) out = {2'd2, 2'd1};
     else if (!left && !right && bottom) out = {2'd3, 2'd1};
@@ -36,6 +37,7 @@ module CellState(in, out);
     else if (!bottom && !left && tr && right && top) out = {2'd2, 2'd3};
     else if (!bottom && !right && tl && left && top) out = {2'd3, 2'd3};
     else out = 0;
+
   end
     
 endmodule

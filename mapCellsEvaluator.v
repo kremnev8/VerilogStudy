@@ -14,8 +14,8 @@ module MapCellsEval(clk, mapData, worldWrite, worldWE, outxpos, outypos, ready);
   	
   output reg worldWE;
   
-  output wire [4:0] outxpos = xpos + (offsetX == 0 ? -5'd1 : (offsetX == 2 ? 5'd1 : 5'd0));
-  output wire [4:0] outypos = ypos + (offsetY == 0 ? -5'd1 : (offsetY == 2 ? 5'd1 : 5'd0));
+  output [4:0] outxpos = xpos + (offsetX == 0 ? -5'd1 : (offsetX == 2 ? 5'd1 : 5'd0));
+  output [4:0] outypos = ypos + (offsetY == 0 ? -5'd1 : (offsetY == 2 ? 5'd1 : 5'd0));
   
   reg [2:0] state;
   
@@ -58,7 +58,7 @@ module MapCellsEval(clk, mapData, worldWrite, worldWE, outxpos, outypos, ready);
           offsetX <= 0;
           state <= 3'h2;
         end else begin
-          neighbors[~cellIndex] <= mapData;
+          neighbors[cellIndex] <= ~mapData;
           offsetX <= offsetX + 2'h1;
           if (offsetX == 2'h2) begin
             offsetX <= 0;
@@ -76,13 +76,13 @@ module MapCellsEval(clk, mapData, worldWrite, worldWE, outxpos, outypos, ready);
         xpos <= xpos + 1'b1;
         neighbors <= 0;
         state <= 3'h1;
-        if (xpos >= 5'd28) begin
-          xpos <= 0;
+        if (xpos >= 5'd31) begin
+          xpos <= 5'h1;
           ypos <= ypos + 1'b1;
         end
-        if (ypos >= 5'd30) begin
-          ypos <= 0;
-          //state <= 3'h4;
+        if (ypos >= 5'd31) begin
+          ypos <= 5'h1;
+          state <= 3'h4;
         end
       end
       3'h4: begin

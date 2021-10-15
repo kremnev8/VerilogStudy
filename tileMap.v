@@ -1,10 +1,36 @@
 
-module tileMap(tileType, rotation, ypos, xpos, out);
+module tileMap(tileType, rotation, yin, xin, out);
   
   input [1:0] tileType;	
   input [1:0] rotation;
-  input [2:0] ypos;
-  input [2:0] xpos;
+  input [2:0] yin;
+  input [2:0] xin;
+  
+  wire transpose = rotation == 1 || rotation == 3;
+  wire flipY = rotation == 2 || rotation == 3;
+  wire flipX = rotation == 1 || rotation == 2;
+  
+  
+  wire [2:0] xpos1;
+  wire [2:0] ypos1;
+  
+  wire [2:0] xpos;
+  wire [2:0] ypos;
+  
+  always @(*) begin
+    if (!transpose) begin
+      xpos1 = yin;
+      ypos1 = xin;
+    end else begin
+      xpos1 = xin;
+      ypos1 = yin;
+    end
+    if (flipX) xpos = ~xpos1;
+    else xpos = xpos1;
+    
+    if (!flipY) ypos = ~ypos1;
+    else ypos = ypos1;
+  end
   
   output out = bits[~xpos];
   

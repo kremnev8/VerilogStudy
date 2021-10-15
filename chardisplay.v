@@ -8,11 +8,12 @@
 `include "cellStateCL.v"
 
 
+
 /*
 Displays a grid of digits on the CRT using a RAM module.
 */
 
-module test_ram1_top(clk, reset, hsync, vsync, rgb, init, evalXpos, evalYpos);
+module test_ram1_top(clk, reset, hsync, vsync, rgb, init);
 
   input clk, reset;
   
@@ -26,7 +27,7 @@ module test_ram1_top(clk, reset, hsync, vsync, rgb, init, evalXpos, evalYpos);
   wire [9:0] ram_addr;
   wire [7:0] ram_read;
   wire [7:0] ram_write;
-  wire ram_writeenable = 0;
+  wire ram_writeenable;
   
   reg [7:0] value = 0;
   
@@ -64,25 +65,25 @@ module test_ram1_top(clk, reset, hsync, vsync, rgb, init, evalXpos, evalYpos);
   // digits ROM
   tileMap numbers(
     .tileType(ram_read[1:0]), 
-    .rotation(2'b00), 
-    .ypos(rom_yofs), 
-    .xpos(xofs), 
+    .rotation(ram_read[3:2]), 
+    .yin(rom_yofs), 
+    .xin(xofs), 
     .out(rom_bit)
   );
   
   wire [31:0] mapValues;
   
   MapData map(
-    .addr(row), 
+    .caseexpr(ram_addr[9:5]), 
     .bits(mapValues)
   );
   
-  output wire [4:0] evalXpos;
-  output wire [4:0] evalYpos;
+  wire [4:0] evalXpos;
+  wire [4:0] evalYpos;
   
   MapCellsEval worldEval(
     .clk(clk), 
-    .mapData(mapValues[~col]), 
+    .mapData(mapValues[~ram_addr[4:0]]), 
     .worldWrite(ram_write), 
     .worldWE(ram_writeenable), 
     .outxpos(evalXpos), 
