@@ -32,7 +32,7 @@ module tileMap(tileType, rotation, yin, xin, out);
     else ypos = ypos1;
   end
   
-  output out = bits[~xpos];
+  output [2:0] out = bits[~xpos] ? 3'd4 : 3'd0;
   
   reg [7:0] bits;
 

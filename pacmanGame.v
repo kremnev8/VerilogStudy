@@ -10,8 +10,13 @@
 `include "animatedSprite.v"
 
 `include "pacmanController.v"
-
 `include "AccessManager.v"
+
+
+`include "ColorMixer.v"
+`include "RandomNumber.v"
+
+
 
 
 
@@ -24,7 +29,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe, pacCE, manC
   input clk, reset;
   
   output hsync, vsync;
-  output [2:0] rgb;
+  output [3:0] rgb;
 
   wire display_on;
   wire [9:0] hpos;
@@ -63,8 +68,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe, pacCE, manC
  
   wire [4:0] row = vpos[8:4];	// 5-bit row, vpos / 8
   wire [4:0] col = hpos[8:4];	// 5-bit column, hpos / 8
-  wire [2:0] rom_yofs = vpos[3:1]; // scanline of cell
-  wire rom_bit;		   // 5 pixels per scanline
+  wire [2:0] rom_yofs = vpos[3:1]; // scanline of cell	   
   
   wire [3:0] digit = ram_read[3:0]; // read digit from RAM
   wire [2:0] xofs = hpos[3:1];      // which pixel to draw (0-7)
@@ -77,7 +81,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe, pacCE, manC
     .rotation(ram_read[3:2]), 
     .yin(rom_yofs), 
     .xin(xofs), 
-    .out(rom_bit)
+    .out(tilemapColor)
   );
   
   wire [4:0] evalXpos;
@@ -102,7 +106,6 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe, pacCE, manC
     .ready(init)
   );
   
-  wire [2:0] color;
   reg [1:0] dir = 1;
   
   wire mainCE;
@@ -127,19 +130,22 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe, pacCE, manC
     .ce(pacmanCE),
     .shpos(hpos), 
     .svpos(vpos), 
-    .col(color), 
+    .col(pacmanColor), 
     .direction(dir),
     .oxPos(pacmanX), 
     .oyPos(pacmanY), 
     .mapData(mapValues[pacmanX])
   );
-  
 
-  // extract bit from ROM output
-  wire r = display_on && 0;
-  wire g = display_on && (color != 0);
-  wire b = display_on && ( hpos < 10'h1e0 ? rom_bit : 1'b0);
-  assign rgb = {b,g,r};
+  wire [2:0] tilemapColor;	
+  wire [2:0] gridColor = ( vpos < 10'h1e0 && hpos < 10'h1e0 ? tilemapColor : 3'd0);
+  wire [2:0] pacmanColor;
+  
+  ColorMixer mixer(
+    .gridColor(gridColor), 
+    .pacmanColor(pacmanColor), 
+    .rgb(rgb)
+  );
   
   always @(posedge clk) begin
     if (keycode[7]) begin
