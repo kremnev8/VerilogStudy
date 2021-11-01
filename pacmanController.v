@@ -1,5 +1,5 @@
 
-module Pacman(clk, shpos, svpos, col, direction);
+module Pacman(clk, ce, shpos, svpos, col, direction, oxPos, oyPos, mapData);
   
   parameter BORDER_X_MIN = 1;
   parameter BORDER_X_MAX = 28;
@@ -7,12 +7,19 @@ module Pacman(clk, shpos, svpos, col, direction);
   parameter BORDER_Y_MAX = 28;
   
   input clk;
+  input ce;
+  
   input [9:0] shpos;
   input [9:0] svpos;
+  input mapData;
+  
   output [2:0] col;
   
   reg [4:0] xpos = 2;
   reg [4:0] ypos = 2;
+  
+  output [4:0] oxPos = nextXPos;
+  output [4:0] oyPos = nextYPos;
   
   wire [4:0] nextXPos = direction == 1 ? xpos - 1'b1 : direction == 3 ? xpos + 1'b1 : xpos;
   wire [4:0] nextYPos = direction == 0 ? ypos - 1'b1 : direction == 2 ? ypos + 1'b1 : ypos;
@@ -29,7 +36,7 @@ module Pacman(clk, shpos, svpos, col, direction);
   
   wire colIn;
   
-  reg [11:0] counter = 0;
+  reg [3:0] counter = 0;
   
   
   AnimatedSprite sprite(
@@ -53,14 +60,14 @@ module Pacman(clk, shpos, svpos, col, direction);
   );
   
   always @(posedge clk) begin
-    if (svpos == 480) begin
+    if (ce) begin
       counter <= counter + 1'b1;
-      if (counter == 1152) begin
+      if (counter >= 7) begin
         counter <= 0;
         
         animState <= ~animState;
         
-        if (nextXPos > BORDER_X_MIN && nextXPos < BORDER_X_MAX)
+        if (nextXPos > BORDER_X_MIN && nextXPos < BORDER_X_MAX )
           xpos <= nextXPos;
         
         if (nextYPos > BORDER_Y_MIN && nextYPos < BORDER_Y_MAX)

@@ -11,11 +11,15 @@
 
 `include "pacmanController.v"
 
+`include "AccessManager.v"
 
 
 
 
-module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
+
+
+
+module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe, pacCE, manCE);
 
   input clk, reset;
   
@@ -76,15 +80,17 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .out(rom_bit)
   );
   
-  wire [31:0] mapValues;
-  
-  MapData map(
-    .caseexpr(ram_addr[9:5]), 
-    .bits(mapValues)
-  );
-  
   wire [4:0] evalXpos;
   wire [4:0] evalYpos;
+  
+  wire [4:0] mapDataAddr = mainCE == 1 ? ram_addr[9:5] : pacmanY;
+  wire [31:0] mapValues;
+  
+  
+  MapData map(
+    .caseexpr(mapDataAddr), 
+    .bits(mapValues)
+  );
   
   MapCellsEval worldEval(
     .clk(clk), 
@@ -99,13 +105,33 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   wire [2:0] color;
   reg [1:0] dir = 1;
   
+  wire mainCE;
+  wire pacmanCE;
+  
+  output pacCE = pacmanCE;
+  output manCE = mainCE;
+  
+  AccessManager ceCtr(
+    .clk(clk), 
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .mainCE(mainCE), 
+    .pacmanCE(pacmanCE)
+  );
+  
+  wire [4:0] pacmanX;
+  wire [4:0] pacmanY;
+  
   Pacman pacman(
     .clk(clk),
+    .ce(pacmanCE),
     .shpos(hpos), 
     .svpos(vpos), 
     .col(color), 
-    .direction(dir)
-    
+    .direction(dir),
+    .oxPos(pacmanX), 
+    .oyPos(pacmanY), 
+    .mapData(mapValues[pacmanX])
   );
   
 
