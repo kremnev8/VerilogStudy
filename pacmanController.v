@@ -62,15 +62,15 @@ module Pacman(clk, ce, shpos, svpos, col, direction, oxPos, oyPos, mapData);
   always @(posedge clk) begin
     if (ce) begin
       counter <= counter + 1'b1;
-      if (counter >= 7) begin
+      if (counter >= 14) begin
         counter <= 0;
         
         animState <= ~animState;
         
-        if (nextXPos > BORDER_X_MIN && nextXPos < BORDER_X_MAX )
+        if (nextXPos > BORDER_X_MIN && nextXPos < BORDER_X_MAX && !mapData)
           xpos <= nextXPos;
         
-        if (nextYPos > BORDER_Y_MIN && nextYPos < BORDER_Y_MAX)
+        if (nextYPos > BORDER_Y_MIN && nextYPos < BORDER_Y_MAX && !mapData)
           ypos <= nextYPos;
           
       end

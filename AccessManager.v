@@ -8,15 +8,15 @@ module AccessManager(clk, shpos, svpos, mainCE, pacmanCE);
   output mainCE = select == 2'd0;
   output pacmanCE = select == 2'd1;
   
-  reg [7:0] counter = 0;
+  reg [12:0] counter = 0;
   
   reg [1:0] select = 0;
   
   
   always @(posedge clk) begin
-    if (svpos == 480) begin
+    if (svpos >= 10'd480) begin
       counter <= counter + 1'b1;
-      if (counter >= 144) begin
+      if (counter >= 13'd4752) begin
         
         select <= select + 1'b1;
         if (select > 2'd1) begin
