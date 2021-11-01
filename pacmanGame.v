@@ -88,7 +88,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   
   MapCellsEval worldEval(
     .clk(clk), 
-    .mapData(mapValues[~ram_addr[4:0]]), 
+    .mapData(mapValues[ram_addr[4:0]]), 
     .worldWrite(ram_write), 
     .worldWE(ram_writeenable), 
     .outxpos(evalXpos), 
