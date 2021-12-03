@@ -1,4 +1,3 @@
-
 `include "hvsync_generator.v"
 `include "digits10.v"
 `include "ram.v"
@@ -15,6 +14,13 @@
 
 `include "ColorMixer.v"
 `include "RandomNumber.v"
+
+`include "bitmap.v"
+`include "cpu16.v"
+
+
+`include "blinkyBitmap.v"
+
 
 
 
@@ -48,7 +54,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe, pacCE, manC
   wire init;
   
   // RAM to hold 32x32 array of bytes
-  RAM_sync ram(
+  RAM_sync tile_ram(
     .clk(clk),
     .dout(ram_read),
     .din(ram_write),
@@ -160,7 +166,95 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe, pacCE, manC
     end
     
   end
+  
+  wire [15:0] address_bus;
+  wire write_enable;
+  wire busy;
+  
+  reg [15:0] to_cpu;
+  wire [15:0] from_cpu;
+  
+  
+  reg [15:0] ram[0:16383];
+  reg [15:0] rom[0:255];
+  
+  reg [15:0] sprite_reg [0:15];
+  
+  //PacMan pos x
+  //PacMan pos y
+  //PacMan rot
+  
+  //Blinky pos x
+  //Blinky pos y
+  //Blinky rot
+  
+  //Pinky pos x
+  //Pinky pos y
+  //Pinky rot
+  
+  //Inky pos x
+  //Inky pos y
+  //Inky rot
+  
+  //Clyde pos x
+  //Clyde pos y
+  //Clyde rot
+  
+  CPU16 cpu(
+          .clk(clk),
+          .reset(reset),
+          .hold(0),
+          .busy(busy),
+          .address(address_bus),
+          .data_in(to_cpu),
+          .data_out(from_cpu),
+          .write(write_enable));
 
+  always @(posedge clk)
+    if (write_enable) begin
+	  if (address_bus[15:14] == 0)
+            ram[address_bus[13:0]] <= from_cpu;
+	  else if (address_bus[15:14] == 2'b10)
+	    sprite_reg[address_bus[3:0]] <= from_cpu;
+    end
+  
+  always @(posedge clk)
+    if (address_bus[15:14] == 0)
+      to_cpu <= ram[address_bus[13:0]];
+    else if (address_bus[15:14] == 2'b01)
+      to_cpu <= rom[address_bus[7:0]];
+	else if (address_bus[15:14] == 2'b10)
+	  to_cpu <= sprite_reg[address_bus[3:0]];
+
+  
+`ifdef EXT_INLINE_ASM
+  initial begin
+    rom = '{
+      __asm
+.arch cpu16arch
+.org 0x8000
+.len 256
+      mov	sp,@$6fff
+      mov	dx,@Fib
+      jsr	dx
+      reset
+Fib:
+      mov	ax,#1
+      mov	bx,#0
+Loop:
+      mov	cx,ax
+      add	ax,bx
+      mov	bx,cx
+      push	ax
+      pop	ax
+      mov	[42],ax
+      mov	ax,[42]
+      bcc	Loop
+      rts
+      __endasm
+    };
+  end
+`endif
   // increment the current RAM cell
   /*always @(posedge clk) begin
     
