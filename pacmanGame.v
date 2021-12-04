@@ -353,11 +353,11 @@ WrongMove:
       
 TryMove:
       push	bx
-      push	bx
+      push	bx ; get direction vector
       mov	dx, @GetRotVector
       jsr	dx
       
-      pop	fx
+      pop	fx ; Add direction to pos
       add	ax, [fx]
       inc 	fx
       add	bx, [fx]
@@ -365,12 +365,12 @@ TryMove:
       push	ax
       push	bx
       
-      mov	fx, @IsValid
+      mov	fx, @IsValid ; Check valid
       jsr	fx
       add	ax, #0
       bz	WrongRot
       
-      pop	bx
+      pop	bx ; Apply new pos
       pop	ax
       pop	fx
       
@@ -380,7 +380,7 @@ TryMove:
       mov	ax, #1
       rts
  WrongRot:
-      pop	ax
+      pop	ax ; Ignore
       pop	ax
       pop	ax
       mov	ax, #0
@@ -388,18 +388,18 @@ TryMove:
       
       
 IsValid:
-      mov	cx, ax
+      mov	cx, ax ; Check X on boundary
       bz	NotValid
       sub	cx, #28
       bpl	NotValid
       
-      mov	cx, bx
+      mov	cx, bx ; Check Y on boundary
       bz	NotValid
       sub	cx, #28
       bpl	NotValid
       
-      mov	[WORLD_POS_X], ax
-      mov	[WORLD_POS_Y], bx
+      mov	[WORLD_POS_X], ax ; Check if map position
+        mov	[WORLD_POS_Y], bx ; is valid
       mov	cx, [MAP_DATA]
       bnz	NotValid
       mov	ax, #1
@@ -410,7 +410,7 @@ NotValid:
       
 GetRotVector:
       mov	bx, ax
-      and	bx, #1
+      and	bx, #1 ;Check axis
       bnz	NotZero
       
       sub	ax, #1
