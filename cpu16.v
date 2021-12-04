@@ -129,7 +129,7 @@ module CPU16(clk, reset, hold, busy,
       case (state)
         // state 0: reset
         S_RESET: begin
-          regs[IP] <= 16'h8000;
+          regs[IP] <= 16'h4000;
           write <= 0;
           state <= S_SELECT;
         end

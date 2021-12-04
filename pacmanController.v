@@ -1,30 +1,35 @@
 
-module Pacman(clk, ce, shpos, svpos, col, direction, oxPos, oyPos, mapData);
+module Pacman(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   
   parameter BORDER_X_MIN = 1;
   parameter BORDER_X_MAX = 28;
   parameter BORDER_Y_MIN = 1;
   parameter BORDER_Y_MAX = 28;
   
+  
+  parameter PRIMARY_COLOR = 1;
+  
   input clk;
   input ce;
   
   input [9:0] shpos;
   input [9:0] svpos;
-  input mapData;
   
-  output [2:0] col;
-  
-  reg [4:0] xpos = 2;
-  reg [4:0] ypos = 2;
-  
-  output [4:0] oxPos = nextXPos;
-  output [4:0] oyPos = nextYPos;
-  
-  wire [4:0] nextXPos = direction == 1 ? xpos - 1'b1 : direction == 3 ? xpos + 1'b1 : xpos;
-  wire [4:0] nextYPos = direction == 0 ? ypos - 1'b1 : direction == 2 ? ypos + 1'b1 : ypos;
-  
+  input [4:0] xpos;
+  input [4:0] ypos;
   input [1:0] direction;
+  //input mapData;
+  
+  output [2:0] col = colIn ? PRIMARY_COLOR : 0;;
+  
+  //reg [4:0] xpos = 2;
+  //reg [4:0] ypos = 2;
+  
+  //output [4:0] oxPos = nextXPos;
+  //output [4:0] oyPos = nextYPos;
+  
+  //wire [4:0] nextXPos = direction == 1 ? xpos - 1'b1 : direction == 3 ? xpos + 1'b1 : xpos;
+  //wire [4:0] nextYPos = direction == 0 ? ypos - 1'b1 : direction == 2 ? ypos + 1'b1 : ypos;
   
   reg animState = 0;
   
@@ -43,12 +48,10 @@ module Pacman(clk, ce, shpos, svpos, col, direction, oxPos, oyPos, mapData);
     .clk(clk), 
     .shpos(shpos), 
     .svpos(svpos), 
-    .col(col), 
     .xpos(xScreenPos), 
     .ypos(yScreenPos), 
     .yout(ysprpos), 
-    .xout(xsprpos), 
-    .colIn(colIn)
+    .xout(xsprpos)
   );
   
   PacManBitmap bitmap(
@@ -67,11 +70,11 @@ module Pacman(clk, ce, shpos, svpos, col, direction, oxPos, oyPos, mapData);
         
         animState <= ~animState;
         
-        if (nextXPos > BORDER_X_MIN && nextXPos < BORDER_X_MAX && !mapData)
+        /*if (nextXPos > BORDER_X_MIN && nextXPos < BORDER_X_MAX && !mapData)
           xpos <= nextXPos;
         
         if (nextYPos > BORDER_Y_MIN && nextYPos < BORDER_Y_MAX && !mapData)
-          ypos <= nextYPos;
+          ypos <= nextYPos;*/
           
       end
     end

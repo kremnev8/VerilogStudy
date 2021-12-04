@@ -1,12 +1,22 @@
 
-module ColorMixer (gridColor, pacmanColor, rgb);
+module ColorMixer (gridColor, pacmanColor, blinkyColor, rgb);
   
   input [2:0] gridColor;
   input [2:0] pacmanColor;
+  input [2:0] blinkyColor;
   
   output [3:0] rgb;
   
-  wire [2:0] totalColor = gridColor == 0 ? pacmanColor : gridColor;
+  wire [2:0] totalColor;
+  
+  always @(*) begin
+    if (gridColor != 0)
+      totalColor = gridColor;
+    else if (pacmanColor != 0)
+      totalColor = pacmanColor;
+    else
+      totalColor = blinkyColor;
+  end
   
    ColorIndex Palette(
      .index(totalColor), 
