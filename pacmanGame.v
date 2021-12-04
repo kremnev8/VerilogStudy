@@ -326,6 +326,31 @@ Loop:
 ; Functions      
 
       
+FindBFS:
+      
+      
+CheckPos:
+      push	ax
+      
+      mov	fx, @IsValid ; Check valid
+      jsr	fx
+      add	ax, #0
+      bnz	Add
+      pop	ax
+      rts
+      
+Add:
+      
+      
+Neighbors:
+      push	ax
+      push	bx
+      dec	ax
+      
+      mov	fx, @CheckPos
+      jsr	fx
+      
+      
 CharLogic:
       push	ax
       push	bx
@@ -399,7 +424,7 @@ IsValid:
       bpl	NotValid
       
       mov	[WORLD_POS_X], ax ; Check if map position
-        mov	[WORLD_POS_Y], bx ; is valid
+      mov	[WORLD_POS_Y], bx ; is valid
       mov	cx, [MAP_DATA]
       bnz	NotValid
       mov	ax, #1
