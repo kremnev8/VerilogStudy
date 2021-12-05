@@ -199,8 +199,8 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   wire [15:0] from_cpu;
   
   
-  reg [15:0] ram[0:16383];
-  reg [15:0] rom[0:255];
+  reg [15:0] ram[0:16319];
+  reg [15:0] rom[0:1023];
   
   wire [7:0] regs_out;
   
@@ -228,7 +228,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   always @(posedge clk)
     if (write_enable) begin
 	  if (address_bus[15:14] == 0)
-            ram[address_bus[13:0]] <= from_cpu;
+            ram[address_bus[13:0] - 14'd64] <= from_cpu;
     end
   
   always @(posedge clk) begin
@@ -236,9 +236,9 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       if (address_bus[15:6] == 0)
       	to_cpu <= {8'b0, regs_out};
       else
-     	to_cpu <= ram[address_bus[13:0]];   //0x0000
+        to_cpu <= ram[address_bus[13:0] - 14'd64];   //0x0000
     else if (address_bus[15:14] == 2'b01)
-      to_cpu <= rom[address_bus[7:0]];    //0x4000
+      to_cpu <= rom[address_bus[9:0]];    //0x4000
     //else if (address_bus[15:14] == 2'b10)
     //to_cpu <= {8'b0, regs_out}; //0x8000
   end
@@ -278,7 +278,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       __asm
 .arch cpu16arch
 .org 0x4000
-.len 256
+.len 1024
 .define PACMAN_POS_X 0
 .define PACMAN_POS_Y 1
 .define PACMAN_ROT   2
@@ -300,7 +300,16 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       mov	[PACMAN_POS_Y], bx
       mov	bx, #27
       mov	[BLINKY_POS_X], bx
-      mov	[BLINKY_POS_Y], bx     
+      mov	[BLINKY_POS_Y], bx
+      
+      mov	ax, [BLINKY_POS_X]
+      mov	bx, [BLINKY_POS_Y]
+      mov	fx, @FindBFS
+      jsr	fx
+      
+      ;mov	fx, @MapClear
+      ;jsr	fx
+      
 Loop:
       mov	ax, [17]
       bnz	Loop
@@ -311,47 +320,355 @@ Loop:
       mov	dx, @CharLogic
       jsr	dx
       
-      mov	ax, [PLAYER_ROT]
-      add	ax, #2
-      and	ax, #3
-      mov	bx, #BLINKY_POS_X
-      mov	dx, @CharLogic
-      jsr	dx
+      mov	ax, [PACMAN_POS_X]
+      mov	bx, [PACMAN_POS_Y]
       
-      mov	bx, #1
+      mov	cx, [BLINKY_POS_X]
+      mov	dx, [BLINKY_POS_Y]
+      
+      mov	fx, @GetPath
+      jsr	fx
+      
+      mov	cx, ax
+      sub	cx, #4
+      bz	Reroute
+      
+      mov	bx, #BLINKY_POS_X
+      mov	fx, @CharLogic
+      jsr	fx
+      
+      mov	bx, #2
       mov	[17], bx
       
       jmp Loop
+
+Reroute:
+      
+      mov	ax, [BLINKY_POS_X]
+      mov	bx, [BLINKY_POS_Y]
+      mov	fx, @FindBFS
+      jsr	fx
+      
+      jmp Loop
+      
       
 ; Functions      
 
       
-FindBFS:
+; Pathfinding      
       
-      
-CheckPos:
+; ax, bx - target pos
+; cx, dx - current pos     
+GetPath:
+      mov	fx, @EncodePos
+      jsr	fx
       push	ax
+      
+      mov	ax, cx
+      mov	bx, dx
+
+      mov	fx, @EncodePos
+      jsr	fx
+      mov	bx, ax
+      pop	ax
+      
+      ; ax - target enc pos
+      ; bx - current enc pos
+      
+SearchLoop: 
+      mov	cx, ax
+      add	cx, #MAP_START
+      mov	cx, [cx]
+      and	cx, @$3ff
+      
+      bz	Failed
+      
+      mov	dx, cx
+      sub	dx, bx
+      bz	PathFound
+      
+      mov	ax, cx
+      jmp	SearchLoop
+      
+PathFound:  
+      mov	cx, bx
+      mov	fx, @DecodePos
+      jsr	fx
+      push	ax
+      push	bx
+      
+      mov	ax, cx
+      mov	fx, @DecodePos
+      jsr	fx
+      
+      mov	cx, ax
+      mov	dx, bx
+      
+      pop	bx
+      pop	ax
+      
+      sub	ax, cx
+      sub	bx, dx
+      
+      mov	fx, @GetRotFromVector
+      jsr	fx
+      rts
+ 
+Failed:  
+      mov	ax, #4
+      rts
+      
+         ; Compute BFS of the map
+FindBFS: ; ax, bx - start pos
+      push	ax
+      push	bx
+      mov	fx, @InitQueue
+      jsr	fx
+      
+      mov	fx, @MapClear
+      jsr	fx
+      
+      pop	bx
+      pop	ax
+      mov	fx, @EncodePos
+      jsr	fx
+      mov	fx, @Enqueue
+      jsr	fx
+      
+      
+      
+BFSLoop:
+
+      mov	fx, @IsEmpty
+      jsr	fx
+      add	ax, #0
+      bnz	EndBFS
+      
+      mov	fx, @Dequeue
+      jsr	fx
+      mov	cx, ax
+      
+      mov	fx, @IsVisited
+      jsr	fx
+      add	ax, #0
+      bnz	BFSLoop
+      
+      push	cx
+      mov	ax, cx
+      mov	fx, @DecodePos
+      jsr	fx
+      
+      mov	fx, @Neighbors
+      jsr	fx
+      
+      pop	ax
+      mov	fx, @SetVisited
+      jsr	fx
+      jmp	BFSLoop
+      
+EndBFS:
+      rts
+      
+CheckPos: ; Check if position was not visited and can be reached
+      push	ax
+      push	cx
       
       mov	fx, @IsValid ; Check valid
       jsr	fx
       add	ax, #0
       bnz	Add
+      pop	cx
+CheckRet:      
       pop	ax
       rts
       
 Add:
+      pop	cx
+      pop	ax
       
+      mov	fx, @EncodePos
+      jsr	fx
       
-Neighbors:
       push	ax
-      push	bx
+      
+      mov	fx, @IsVisited
+      jsr	fx
+      add	ax, #0
+      bnz	CheckRet
+      
+      pop	ax
+      
+      mov	fx, @Enqueue
+      jsr	fx
+      
+      push	ax
+      mov	ax, cx
+      mov	bx, dx
+      
+      mov	fx, @EncodePos
+      jsr	fx
+      
+      pop	bx
+      add	bx, #MAP_START
+      mov	[bx], ax
+      
+      rts
+          
+           ; Find all Neighbors
+Neighbors: ; ax, bx - start pos
+      mov	cx, ax
+      mov	dx, bx
+      dec	bx
+      
+      mov	fx, @CheckPos
+      jsr	fx
+
+      mov	ax, cx
+      mov	bx, dx
       dec	ax
       
       mov	fx, @CheckPos
       jsr	fx
       
+      mov	ax, cx
+      mov	bx, dx
+      inc	bx
       
-CharLogic:
+      mov	fx, @CheckPos
+      jsr	fx
+      
+      mov	ax, cx
+      mov	bx, dx
+      inc	ax
+      
+      mov	fx, @CheckPos
+      jsr	fx
+      rts
+
+; ax, bx - vector
+; ax - result
+EncodePos: ; Encode position vector into one value
+      asl	bx
+      asl	bx
+      asl	bx
+      asl	bx
+      asl	bx
+      add	ax, bx
+      rts
+
+; ax - value
+; ax, bx - result      
+DecodePos: ; Decode position value to a vector
+      mov 	bx, ax
+      and	ax, #$1f
+      lsr	bx
+      lsr	bx
+      lsr	bx
+      lsr	bx
+      lsr	bx
+      rts  
+      
+; Map
+      
+.define MAP_START 208
+.define MAP_END 1232
+.define VISITED_FLAG 4096
+      
+MapClear: ; Clear all values in the map area
+      mov	ax, #MAP_START
+      mov	bx, #0
+
+ClearLoop:
+      mov	[ax], bx
+      inc	ax
+      mov	cx, ax
+      sub	cx, @MAP_END
+      bnz	ClearLoop
+      
+      rts
+ 
+IsVisited: ; Check if a postion has been visited
+      add	ax, #MAP_START
+      mov	bx, [ax]
+      and 	bx, @VISITED_FLAG
+      bnz	Visited
+      mov	ax, #0
+      rts
+      
+Visited:
+      mov	ax, #1
+      rts
+      
+SetVisited: ; Set position as visited
+      mov	cx, ax
+      add	cx, #MAP_START
+      mov	ax, [cx]
+      or	ax, @VISITED_FLAG
+      mov	[cx], ax
+      rts
+      
+; Queue
+      
+.define QUEUE_START_POS 64
+.define QUEUE_END_POS 65
+      
+.define QUEUE_START 66 
+.define QUEUE_END 194  
+      
+.define QUEUE_MASK 127      
+ 
+      
+InitQueue: ; Prepare queue
+      mov	ax, #0
+      mov	[QUEUE_START_POS], ax ; start
+      mov	[QUEUE_END_POS], ax ; end
+      
+      mov	ax, #QUEUE_START
+      mov	bx, #0
+
+QueueClearLoop:
+      mov	[ax], bx
+      inc	ax
+      mov	cx, ax
+      sub	cx, #QUEUE_END
+      bnz	QueueClearLoop
+      
+      rts
+      
+Enqueue: ; Add value to queue
+      mov	bx, [QUEUE_END_POS]
+      add	bx, #QUEUE_START
+      mov	[bx], ax
+      sub	bx, #QUEUE_START
+      add	bx, #1
+      and	bx, #QUEUE_MASK
+      mov	[QUEUE_END_POS], bx
+      rts
+      
+Dequeue: ; Remove value from queue
+      mov	ax, [QUEUE_START_POS]
+      add	ax, #QUEUE_START
+      mov	bx, [ax]
+      sub	ax, #QUEUE_START
+      add	ax, #1
+      and	ax, #QUEUE_MASK
+      mov	[QUEUE_START_POS], ax
+      mov	ax, bx
+      rts
+      
+IsEmpty: ; Check if queue has any values stored
+      mov	ax, [QUEUE_START_POS]
+      mov	bx, [QUEUE_END_POS]
+      sub	ax, bx
+      bz	RetZero
+      mov	ax, #0
+      rts
+RetZero:
+      mov	ax, #1
+      rts
+      
+      
+CharLogic: ; Movement logic for characters
       push	ax
       push	bx
       
@@ -376,10 +693,10 @@ WrongMove:
       jsr	dx
       rts
       
-TryMove:
+TryMove: ; Move character to position
       push	bx
       push	bx ; get direction vector
-      mov	dx, @GetRotVector
+      mov	dx, @GetVector
       jsr	dx
       
       pop	fx ; Add direction to pos
@@ -412,7 +729,7 @@ TryMove:
       rts
       
       
-IsValid:
+IsValid: ; Check if character can enter this position
       mov	cx, ax ; Check X on boundary
       bz	NotValid
       sub	cx, #28
@@ -432,8 +749,19 @@ IsValid:
 NotValid:
       mov	ax, #0
       rts
+
+GetRotFromVector:
+      add	ax, #0
+      bnz	XNotZero
+      mov	ax, bx
+      add	ax, #1
+      rts
       
-GetRotVector:
+XNotZero:   
+      add	ax, #2
+      rts
+      
+GetVector: ; Calculate vector representing rotation value
       mov	bx, ax
       and	bx, #1 ;Check axis
       bnz	NotZero
