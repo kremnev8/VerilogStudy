@@ -11,28 +11,13 @@ module tileMap(tileType, rotation, yin, xin, out);
   wire flipX = rotation == 1 || rotation == 2;
   
   
-  wire [2:0] xpos1;
-  wire [2:0] ypos1;
+  wire [2:0] xpos1 = !transpose ? yin : xin;
+  wire [2:0] ypos1 = !transpose ? xin : yin;
   
-  wire [2:0] xpos;
-  wire [2:0] ypos;
+  wire [2:0] xpos = !flipX ? ~xpos1 : xpos1;
+  wire [2:0] ypos = !flipY ? ~ypos1 : ypos1;
   
-  always @(*) begin
-    if (!transpose) begin
-      xpos1 = yin;
-      ypos1 = xin;
-    end else begin
-      xpos1 = xin;
-      ypos1 = yin;
-    end
-    if (flipX) xpos = ~xpos1;
-    else xpos = xpos1;
-    
-    if (!flipY) ypos = ~ypos1;
-    else ypos = ypos1;
-  end
-  
-  output [2:0] out = bits[~xpos] ? 3'd4 : 3'd0;
+  output [2:0] out = bits[xpos] ? 3'd4 : 3'd0;
   
   reg [7:0] bits;
 

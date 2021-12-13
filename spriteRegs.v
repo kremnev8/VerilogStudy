@@ -1,7 +1,7 @@
 
-module SpriteRegs(clk, reg_addr, in,  out, we, mapData, playerRot);
+module SpriteRegs(clk, reg_addr, in,  out, we, mapData, playerRot, frame);
  
-  reg [7:0] sprite_reg [0:18];
+  reg [7:0] sprite_reg [0:17];
   
   integer k;
   
@@ -38,12 +38,14 @@ module SpriteRegs(clk, reg_addr, in,  out, we, mapData, playerRot);
   
   //32 World map data
   //33 Player desire rot
+  //34 Frame count
   
   input clk;
   
   input [5:0] reg_addr;
   input mapData;
   input [1:0] playerRot;
+  input [5:0] frame;
   
   output [7:0] out;
   input [7:0] in;
@@ -63,6 +65,8 @@ module SpriteRegs(clk, reg_addr, in,  out, we, mapData, playerRot);
         out = {7'b0, mapData};
       else if (reg_addr[4:0] == 5'd1)
         out = {6'b0, playerRot};
+      else if (reg_addr[4:0] == 5'd2)
+        out = {2'b0, frame};
       else
         out = 0;
     end

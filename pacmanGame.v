@@ -122,25 +122,19 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   reg [1:0] dir = 1;
   
   wire mainCE;
-  wire pacmanCE;
-  
-  //output pacCE = pacmanCE;
-  //output manCE = mainCE;
   
   AccessManager ceCtr(
     .clk(clk), 
-    .shpos(hpos), 
+    .shpos(hpos),
     .svpos(vpos), 
-    .mainCE(mainCE), 
-    .pacmanCE(pacmanCE)
+    .mainCE(mainCE)
+    //.cpuCE(cpuCE),
+    //.frameTime(ftime)
   );
-  
-  //wire [4:0] pacmanX;
-  //wire [4:0] pacmanY;
   
   Pacman pacman(
     .clk(clk),
-    .ce(pacmanCE),
+    .ce(mainCE),
     .shpos(hpos), 
     .svpos(vpos), 
     .col(pacmanColor), 
@@ -152,7 +146,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   
   Blinky blinky(
     .clk(clk), 
-    .ce(pacmanCE), 
+    .ce(mainCE), 
     .shpos(hpos), 
     .svpos(vpos), 
     .col(blinkyColor), 
@@ -165,6 +159,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   wire [2:0] gridColor = ( vpos < 10'h1e0 && hpos < 10'h1e0 ? tilemapColor : 3'd0);
   wire [2:0] pacmanColor;
   wire [2:0] blinkyColor;
+ 
   
   ColorMixer mixer(
     .gridColor(gridColor), 
@@ -172,6 +167,8 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .blinkyColor(blinkyColor),
     .rgb(rgb)
   );
+  
+  reg [5:0] timeCounter = 0;
   
   always @(posedge clk) begin
     if (keycode[7]) begin
@@ -182,10 +179,10 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
         8'he4: dir <= 3;
         default:;
       endcase
-      keystrobe <= 1;
+      keystrobe <= 1; 
     end
     
-    if (vpos == 1 && hpos == 1) begin
+    if (mainCE) begin
       if (regs.sprite_reg[17] > 0) 
         regs.sprite_reg[17] <= regs.sprite_reg[17] - 1'b1;
      
@@ -214,7 +211,8 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .out(regs_out), 
     .we(write_enable && address_bus[15:6] == 0),
     .mapData(mapValues_b[regs.sprite_reg[3][4:0]]), 
-    .playerRot(dir)
+    .playerRot(dir),
+    .frame(timeCounter)
   );
  
   
@@ -268,9 +266,11 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   //14 Clyde pos x
   //15 Clyde pos y
   //16 Clyde rot
+  //17 Frame lock register
   
   //32 World map data
   //33 Player desire rot
+  //34 Frame count
   
 `ifdef EXT_INLINE_ASM
   
@@ -305,24 +305,52 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       mov	[BLINKY_POS_X], bx
       mov	[BLINKY_POS_Y], bx
       
+      mov	ax, #BLINKY_POS_X
+      mov	[$C8], ax
+      
       mov	ax, [BLINKY_POS_X]
       mov	bx, [BLINKY_POS_Y]
+      
       mov	fx, @FindBFS
       jsr	fx
       
       ;mov	fx, @MapClear
       ;jsr	fx
       
+      
 Loop:
-      mov	ax, [17]
-      bnz	Loop
+      ;mov	ax, [17]
+     ; bnz	Loop
       
-      mov	ax, [PLAYER_ROT]
-      mov	bx, #PACMAN_POS_X
+      mov	ax, [34]
+      sub	ax, #40
+      bnz	Next
       
-      mov	dx, @CharLogic
-      jsr	dx
+      mov	fx, @PacmanThink
+      jsr	fx
       
+Next:    
+      
+      mov	ax, [34]
+      sub	ax, #40
+      bnz	Next1
+      
+      mov	fx, @BlinkyThink
+      jsr	fx
+      
+Next1:      
+      
+    ;  mov	bx, #1
+     ; mov	[17], bx
+      
+      jmp Loop
+
+      
+      
+; Character logic
+      
+      
+BlinkyThink:
       mov	ax, [PACMAN_POS_X]
       mov	bx, [PACMAN_POS_Y]
       
@@ -339,20 +367,29 @@ Loop:
       mov	bx, #BLINKY_POS_X
       mov	fx, @CharLogic
       jsr	fx
+      rts
       
-      mov	bx, #3
-      mov	[17], bx
-      
-      jmp Loop
-
 Reroute:
+      
+      mov	ax, #BLINKY_POS_X
+      mov	[$C8], ax
       
       mov	ax, [BLINKY_POS_X]
       mov	bx, [BLINKY_POS_Y]
+      
       mov	fx, @FindBFS
       jsr	fx
       
-      jmp Loop
+      rts    
+      
+      
+PacmanThink:
+      mov	ax, [PLAYER_ROT]
+      mov	bx, #PACMAN_POS_X
+      
+      mov	dx, @CharLogic
+      jsr	dx
+      rts
       
       
 ; Functions      
@@ -425,6 +462,7 @@ Failed:
 FindBFS: ; ax, bx - start pos
       push	ax
       push	bx
+      
       mov	fx, @InitQueue
       jsr	fx
       
@@ -460,6 +498,7 @@ BFSLoop:
       mov	ax, cx
       mov	fx, @DecodePos
       jsr	fx
+
       
       mov	fx, @Neighbors
       jsr	fx
@@ -471,23 +510,45 @@ BFSLoop:
       
 EndBFS:
       rts
+    
       
-CheckPos: ; Check if position was not visited and can be reached
-      push	ax
+; Check _if position was not visited and can be reached      
+CheckPos:
+      push	dx
       push	cx
+      push	bx
+      push	ax
+      
+      mov	cx, ax
+      mov	dx, bx
       
       mov	fx, @IsValid ; Check valid
       jsr	fx
       add	ax, #0
+      bz	CheckRet
+      
+      mov	fx, @GetBack
+      jsr	fx
+      
+      
+      sub	ax, cx
       bnz	Add
-      pop	cx
-CheckRet:      
+      
+      sub	bx, dx
+      bnz	Add
+      
+CheckRet:  
       pop	ax
-      rts
+      pop	bx
+      pop	cx
+      pop	dx
+      rts   
       
 Add:
-      pop	cx
       pop	ax
+      pop	bx
+      pop	cx
+      pop	dx
       
       mov	fx, @EncodePos
       jsr	fx
@@ -497,7 +558,7 @@ Add:
       mov	fx, @IsVisited
       jsr	fx
       add	ax, #0
-      bnz	CheckRet
+      bnz	AddRet
       
       pop	ax
       
@@ -514,9 +575,27 @@ Add:
       pop	bx
       add	bx, #MAP_START
       mov	[bx], ax
-      
       rts
-          
+      
+AddRet:
+      pop	ax
+      rts  
+      
+GetBack:
+      mov	ex, [$c8]
+
+      mov	ax, [ex+2]
+      add	ax, #2
+      and	ax, #3
+      mov	fx, @GetVector
+      jsr	fx
+      
+      add	ax, [ex]
+      
+      inc	ex
+      add	bx, [ex]
+      rts      
+      
            ; Find all Neighbors
 Neighbors: ; ax, bx - start pos
       mov	cx, ax
@@ -733,19 +812,19 @@ TryMove: ; Move character to position
       
       
 IsValid: ; Check if character can enter this position
-      mov	cx, ax ; Check X on boundary
+      mov	ex, ax ; Check X on boundary
       bz	NotValid
-      sub	cx, #28
+      sub	ex, #28
       bpl	NotValid
       
-      mov	cx, bx ; Check Y on boundary
+      mov	ex, bx ; Check Y on boundary
       bz	NotValid
-      sub	cx, #28
+      sub	ex, #28
       bpl	NotValid
       
       mov	[WORLD_POS_X], ax ; Check if map position
       mov	[WORLD_POS_Y], bx ; is valid
-      mov	cx, [MAP_DATA]
+      mov	ex, [MAP_DATA]
       bnz	NotValid
       mov	ax, #1
       rts

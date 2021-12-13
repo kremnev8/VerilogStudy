@@ -39,9 +39,9 @@ module Pacman(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   wire [3:0] ysprpos;
   wire [3:0] xsprpos;
   
-  wire colIn;
+  reg [7:0] counter = 0;
   
-  reg [3:0] counter = 0;
+  wire colIn;
   
   
   AnimatedSprite sprite(
@@ -65,20 +65,13 @@ module Pacman(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   always @(posedge clk) begin
     if (ce) begin
       counter <= counter + 1'b1;
-      if (counter >= 14) begin
+      if (counter >= 60) begin
         counter <= 0;
         
         animState <= ~animState;
-        
-        /*if (nextXPos > BORDER_X_MIN && nextXPos < BORDER_X_MAX && !mapData)
-          xpos <= nextXPos;
-        
-        if (nextYPos > BORDER_Y_MIN && nextYPos < BORDER_Y_MAX && !mapData)
-          ypos <= nextYPos;*/
           
       end
     end
-    
   end
   
   

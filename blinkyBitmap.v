@@ -51,14 +51,13 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   always @(posedge clk) begin
     if (ce) begin
       counter <= counter + 1'b1;
-      if (counter >= 14) begin
+      if (counter >= 10) begin
         counter <= 0;
         
         animState <= ~animState;
-
+          
       end
     end
-    
   end
   
   
