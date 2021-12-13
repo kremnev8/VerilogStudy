@@ -2,14 +2,18 @@
 `ifndef MapData_H
 `define MapData_H
 
-module MapData(caseexpr, bits);
+module MapData(addr_a, addr_b, out_a, out_b);
   
-  input [4:0] caseexpr;	
-  output [31:0] bits;
+  input [4:0] addr_a;	
+  input [4:0] addr_b;	
+  
+  output [31:0] out_a;
+  output [31:0] out_b;
   
   reg [31:0] bitarray[0:31];
   
-  assign bits = bitarray[caseexpr];
+  assign out_a = bitarray[addr_a];
+  assign out_b = bitarray[addr_b];
   
   initial begin/*{w:32,h:32,bpw:32,count:1}*/
     bitarray['h00] = 32'b11111111111111111111111111111111;

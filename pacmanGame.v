@@ -97,13 +97,16 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   wire [4:0] evalXpos;
   wire [4:0] evalYpos;
   
-  wire [4:0] mapDataAddr = hold ? ram_addr[9:5] : regs.sprite_reg[4][4:0] ;
+  wire [4:0] mapDataAddr = ram_addr[9:5];
   wire [31:0] mapValues;
+  wire [31:0] mapValues_b;
   
   
   MapData map(
-    .caseexpr(mapDataAddr), 
-    .bits(mapValues)
+    .addr_a(mapDataAddr), 
+    .addr_b(regs.sprite_reg[4][4:0]), 
+    .out_a(mapValues), 
+    .out_b(mapValues_b)
   );
   
   MapCellsEval worldEval(
@@ -210,7 +213,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .in(from_cpu[7:0]),
     .out(regs_out), 
     .we(write_enable && address_bus[15:6] == 0),
-    .mapData(mapValues[regs.sprite_reg[3][4:0]]), 
+    .mapData(mapValues_b[regs.sprite_reg[3][4:0]]), 
     .playerRot(dir)
   );
  
@@ -218,7 +221,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   CPU16 cpu(
           .clk(clk),
           .reset(reset),
-          .hold(hold),
+          .hold(0),
           .busy(busy),
           .address(address_bus),
           .data_in(to_cpu),
@@ -337,7 +340,7 @@ Loop:
       mov	fx, @CharLogic
       jsr	fx
       
-      mov	bx, #2
+      mov	bx, #3
       mov	[17], bx
       
       jmp Loop
