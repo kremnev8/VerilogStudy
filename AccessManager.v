@@ -12,6 +12,9 @@ module AccessManager(clk, shpos, svpos, mainCE);
     if (shpos == 0 && svpos == 0) begin
       mainCE <= 1;
     end
+    else if (shpos == 0 && svpos == 262) begin
+      mainCE <= 1;
+    end
     else
       mainCE <= 0;
   end

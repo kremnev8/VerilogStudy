@@ -6,8 +6,9 @@ module Pacman(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   parameter BORDER_Y_MIN = 1;
   parameter BORDER_Y_MAX = 28;
   
-  
   parameter PRIMARY_COLOR = 1;
+  
+  parameter WAIT_FRAME_TIME = 18 / (60 / `FRAME_RATE);
   
   input clk;
   input ce;
@@ -39,7 +40,7 @@ module Pacman(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   wire [3:0] ysprpos;
   wire [3:0] xsprpos;
   
-  reg [7:0] counter = 0;
+  reg [5:0] counter = 0;
   
   wire colIn;
   
@@ -65,7 +66,7 @@ module Pacman(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   always @(posedge clk) begin
     if (ce) begin
       counter <= counter + 1'b1;
-      if (counter >= 60) begin
+      if (counter >= WAIT_FRAME_TIME) begin
         counter <= 0;
         
         animState <= ~animState;

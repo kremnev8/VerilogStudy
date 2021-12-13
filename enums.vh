@@ -7,3 +7,5 @@
 `define PINK 3'd5
 `define CYAN 3'd6
 `define ORANGE 3'd7
+
+`define FRAME_RATE 10

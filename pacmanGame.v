@@ -104,7 +104,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   
   MapData map(
     .addr_a(mapDataAddr), 
-    .addr_b(regs.sprite_reg[4][4:0]), 
+    .addr_b(regs.sprite_reg[5][4:0]), 
     .out_a(mapValues), 
     .out_b(mapValues_b)
   );
@@ -150,9 +150,9 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .shpos(hpos), 
     .svpos(vpos), 
     .col(blinkyColor), 
-    .direction(regs.sprite_reg[7][1:0]),
-    .xpos(regs.sprite_reg[5][4:0]), 
-    .ypos(regs.sprite_reg[6][4:0])
+    .direction(regs.sprite_reg[8][1:0]),
+    .xpos(regs.sprite_reg[6][4:0]), 
+    .ypos(regs.sprite_reg[7][4:0])
   );
 
   wire [2:0] tilemapColor;	
@@ -183,9 +183,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     end
     
     if (mainCE) begin
-      if (regs.sprite_reg[17] > 0) 
-        regs.sprite_reg[17] <= regs.sprite_reg[17] - 1'b1;
-     
+      regs.sprite_reg[22] <= 1;
     end
     
   end
@@ -210,7 +208,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .in(from_cpu[7:0]),
     .out(regs_out), 
     .we(write_enable && address_bus[15:6] == 0),
-    .mapData(mapValues_b[regs.sprite_reg[3][4:0]]), 
+    .mapData(mapValues_b[regs.sprite_reg[4][4:0]]), 
     .playerRot(dir),
     .frame(timeCounter)
   );
@@ -247,26 +245,31 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   //0 PacMan pos x
   //1 PacMan pos y
   //2 PacMan rot
+  //3 PacMan timer
   
-  //3 World map x pos
-  //4 World map y pos
+  //4 World map x pos
+  //5 World map y pos
   
-  //5 Blinky pos x
-  //6 Blinky pos y
-  //7 Blinky rot
+  //6 Blinky pos x
+  //7 Blinky pos y
+  //8 Blinky rot
+  //9 Blinky timer
   
-  //8 Pinky pos x
-  //9 Pinky pos y
-  //10 Pinky rot
+  //10 Pinky pos x
+  //11 Pinky pos y
+  //12 Pinky rot
+  //13 Pinky timer
    
-  //11 Inky pos x
-  //12 Inky pos y
-  //13 Inky rot
+  //14 Inky pos x
+  //15 Inky pos y
+  //16 Inky rot
+  //17 Inky rot
    
-  //14 Clyde pos x
-  //15 Clyde pos y
-  //16 Clyde rot
-  //17 Frame lock register
+  //18 Clyde pos x
+  //19 Clyde pos y
+  //20 Clyde rot
+  //21 Inky rot
+  //22 Frame lock register
   
   //32 World map data
   //33 Player desire rot
@@ -285,13 +288,19 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define PACMAN_POS_X 0
 .define PACMAN_POS_Y 1
 .define PACMAN_ROT   2
+.define PACMAN_TIMER 3 
+      
+.define PACMAN_WAIT  3
 
-.define WORLD_POS_X  3
-.define WORLD_POS_Y  4
+.define WORLD_POS_X  4
+.define WORLD_POS_Y  5
 
-.define BLINKY_POS_X 5
-.define BLINKY_POS_Y 6
-.define BLINKY_ROT 7
+.define BLINKY_POS_X 6
+.define BLINKY_POS_Y 7
+.define BLINKY_ROT   8
+.define BLINKY_TIMER 9 
+      
+.define FRAME_SYNC   22       
       
 .define MAP_DATA 32
 .define PLAYER_ROT 33
@@ -314,34 +323,46 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       mov	fx, @FindBFS
       jsr	fx
       
-      ;mov	fx, @MapClear
-      ;jsr	fx
+      mov	ax, #0
+      mov	[PACMAN_TIMER], ax
+      mov	[BLINKY_TIMER], ax
+      
       
       
 Loop:
-      ;mov	ax, [17]
-     ; bnz	Loop
+      mov	ax, [FRAME_SYNC]
+      sub	ax, #1
+      bnz	Loop
+      mov	[FRAME_SYNC], ax
       
-      mov	ax, [34]
-      sub	ax, #40
-      bnz	Next
+      mov	ax, [PACMAN_TIMER]
+      add	ax, #1
+      mov	[PACMAN_TIMER], ax
       
+      sub	ax, #PACMAN_WAIT
+      bmi	Next
+      
+      mov	ax, #0
+      mov	[PACMAN_TIMER], ax
       mov	fx, @PacmanThink
       jsr	fx
       
 Next:    
+      mov	ax, [BLINKY_TIMER]
+      add	ax, #1
+      mov	[BLINKY_TIMER], ax
       
-      mov	ax, [34]
-      sub	ax, #40
+      sub	ax, #PACMAN_WAIT
       bnz	Next1
+      
+      mov	ax, #0
+      mov	[BLINKY_TIMER], ax
       
       mov	fx, @BlinkyThink
       jsr	fx
       
 Next1:      
       
-    ;  mov	bx, #1
-     ; mov	[17], bx
       
       jmp Loop
 
@@ -384,6 +405,12 @@ Reroute:
       
       
 PacmanThink:
+      
+      mov	ax, [10]
+      add	ax, #1
+      mov	[10], ax
+     
+      
       mov	ax, [PLAYER_ROT]
       mov	bx, #PACMAN_POS_X
       

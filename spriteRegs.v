@@ -1,12 +1,12 @@
 
 module SpriteRegs(clk, reg_addr, in,  out, we, mapData, playerRot, frame);
  
-  reg [7:0] sprite_reg [0:17];
+  reg [7:0] sprite_reg [0:22];
   
   integer k;
   
   initial begin
-    for (k = 0; k < 18; k = k + 1) begin
+    for (k = 0; k < 22; k = k + 1) begin
       sprite_reg[k] = 0;
     end
   end

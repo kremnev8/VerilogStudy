@@ -3,6 +3,8 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   
   parameter [2:0] colorMap [0:3] = '{`BLACK, `RED, `BLUE,  `WHITE};
   
+  parameter WAIT_FRAME_TIME = 20 / (60 / `FRAME_RATE);
+  
   //back, primary, eyes, eyes outer
   
   input clk;
@@ -27,7 +29,7 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   
   wire [1:0] colIn;
   
-  reg [3:0] counter = 0;
+  reg [5:0] counter = 0;
   
   
   AnimatedSprite sprite(
@@ -51,7 +53,7 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   always @(posedge clk) begin
     if (ce) begin
       counter <= counter + 1'b1;
-      if (counter >= 10) begin
+      if (counter >= WAIT_FRAME_TIME) begin
         counter <= 0;
         
         animState <= ~animState;
