@@ -17,7 +17,7 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   input [4:0] ypos;
   input [1:0] direction;
   
-  output [2:0] col = colorMap[colIn];
+  output reg [2:0] col;
   
   reg animState = 0;
   
@@ -51,6 +51,9 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   );
   
   always @(posedge clk) begin
+    
+    col <= colorMap[colIn];
+    
     if (ce) begin
       counter <= counter + 1'b1;
       if (counter >= WAIT_FRAME_TIME) begin

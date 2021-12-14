@@ -1,5 +1,4 @@
 `include "hvsync_generator.v"
-`include "digits10.v"
 `include "ram.v"
 `include "tileMap.v"
 `include "MapData.v"
@@ -8,22 +7,22 @@
 `include "pacManBitmap.v"
 `include "animatedSprite.v"
 
-
 `include "enums.vh"
-
 
 `include "pacmanController.v"
 `include "AccessManager.v"
 
 `include "ColorMixer.v"
-`include "RandomNumber.v"
-
-`include "bitmap.v"
 `include "cpu16.v"
-
 `include "spriteRegs.v"
-
 `include "blinkyBitmap.v"
+
+
+`include "pelletRenderer.v"
+`include "pelletBitmap.v"
+
+`include "pelletData.v"
+`include "digits10.v"
 
 
 
@@ -119,6 +118,39 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .ready(init)
   );
   
+  
+  wire [4:0] pelletXpos;
+  wire [4:0] pelletYpos;
+  wire pelletTmpData;
+  
+  wire [2:0] pelletColor;
+  
+  pelletRenderer pellets(
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .xout(pelletXpos), 
+    .yout(pelletYpos), 
+    .din(pelletTmpData),
+    .color(pelletColor)
+  );
+  
+  wire [4:0] cpuPelletX = regs.sprite_reg[23][4:0];
+  wire [4:0] cpuPelletY = regs.sprite_reg[24][4:0];
+  wire cpuPelletClear = regs.sprite_reg[25][0];
+  wire cpuPelletData;
+  
+  PelletData data(
+    .clk(clk), 
+    .reset(reset),
+    .xpos_a(pelletXpos), 
+    .ypos_a(pelletYpos), 
+    .out_a(pelletTmpData),
+    .xpos_b(cpuPelletX), 
+    .ypos_b(cpuPelletY), 
+    .clear_b(cpuPelletClear), 
+    .out_b(cpuPelletData)
+  );
+  
   reg [1:0] dir = 1;
   
   wire mainCE;
@@ -154,15 +186,45 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .xpos(regs.sprite_reg[6][4:0]), 
     .ypos(regs.sprite_reg[7][4:0])
   );
+  
+  wire [15:0] digitData  = regs.scoreDisp;
+  
+  wire [2:0] digitYofs = vpos[5:3];
+  wire [9:0] movHpos = hpos - 70;
+  wire [2:0] digitXofs = movHpos[4:2];
+  wire [2:0] curDigit = movHpos[7:5];
+  
+  wire [3:0] curDData;
+  
+  always @(*) begin
+    if (curDigit == 0)
+      curDData = 0;
+    else
+      curDData = digitData[~curDigit*4+: 4];
+  end
+  
+  wire [4:0] digitOut;
+  
+  digits10 digits(
+    .digit(curDData), 
+    .yofs(digitYofs), 
+    .bits(digitOut)
+  );
 
   wire [2:0] tilemapColor;	
   wire [2:0] gridColor = ( vpos < 10'h1e0 && hpos < 10'h1e0 ? tilemapColor : 3'd0);
+  
+  wire digitFilter = ( vpos > 10'h30 && vpos < 10'h70 && hpos > 10'h1c5 && hpos < 10'h270 ? digitOut[~digitXofs] : 1'd0);
+  wire [2:0] digitColor = digitFilter ? `WHITE : `BLACK;
+  
   wire [2:0] pacmanColor;
   wire [2:0] blinkyColor;
  
   
   ColorMixer mixer(
     .gridColor(gridColor), 
+    .numbersColor(digitColor),
+    .pelletColor(pelletColor),
     .pacmanColor(pacmanColor), 
     .blinkyColor(blinkyColor),
     .rgb(rgb)
@@ -171,6 +233,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   reg [5:0] timeCounter = 0;
   
   always @(posedge clk) begin
+    
     if (keycode[7]) begin
       case(keycode)
         8'hf7: dir <= 0;
@@ -200,17 +263,19 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   reg [15:0] ram[0:16319];
   reg [15:0] rom[0:1023];
   
-  wire [7:0] regs_out;
+  wire [15:0] regs_out;
   
   SpriteRegs regs(
     .clk(clk),
+    .reset(reset),
     .reg_addr(address_bus[5:0]), 
-    .in(from_cpu[7:0]),
+    .in(from_cpu),
     .out(regs_out), 
     .we(write_enable && address_bus[15:6] == 0),
     .mapData(mapValues_b[regs.sprite_reg[4][4:0]]), 
     .playerRot(dir),
-    .frame(timeCounter)
+    .frame(timeCounter),
+    .pelletData(cpuPelletData)
   );
  
   
@@ -233,47 +298,15 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   always @(posedge clk) begin
     if (address_bus[15:14] == 0)
       if (address_bus[15:6] == 0)
-      	to_cpu <= {8'b0, regs_out};
+      	to_cpu <= regs_out;
       else
         to_cpu <= ram[address_bus[13:0] - 14'd64];   //0x0000
-    else if (address_bus[15:14] == 2'b01)
+    
+    else if (address_bus[15:14] == 2'b01) 
       to_cpu <= rom[address_bus[9:0]];    //0x4000
     //else if (address_bus[15:14] == 2'b10)
     //to_cpu <= {8'b0, regs_out}; //0x8000
   end
-  
-  //0 PacMan pos x
-  //1 PacMan pos y
-  //2 PacMan rot
-  //3 PacMan timer
-  
-  //4 World map x pos
-  //5 World map y pos
-  
-  //6 Blinky pos x
-  //7 Blinky pos y
-  //8 Blinky rot
-  //9 Blinky timer
-  
-  //10 Pinky pos x
-  //11 Pinky pos y
-  //12 Pinky rot
-  //13 Pinky timer
-   
-  //14 Inky pos x
-  //15 Inky pos y
-  //16 Inky rot
-  //17 Inky rot
-   
-  //18 Clyde pos x
-  //19 Clyde pos y
-  //20 Clyde rot
-  //21 Inky rot
-  //22 Frame lock register
-  
-  //32 World map data
-  //33 Player desire rot
-  //34 Frame count
   
 `ifdef EXT_INLINE_ASM
   
@@ -290,7 +323,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define PACMAN_ROT   2
 .define PACMAN_TIMER 3 
       
-.define PACMAN_WAIT  3
+.define PACMAN_WAIT  4
 
 .define WORLD_POS_X  4
 .define WORLD_POS_Y  5
@@ -300,7 +333,15 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define BLINKY_ROT   8
 .define BLINKY_TIMER 9 
       
+.define BLINKY_WAIT  6      
+      
 .define FRAME_SYNC   22       
+.define PELLET_X 23
+.define PELLET_Y 24     
+.define PELLET_CLEAR 25
+.define PELLET_DATA 35      
+.define SCORE 26
+.define SCORE_DISP 27
       
 .define MAP_DATA 32
 .define PLAYER_ROT 33
@@ -326,7 +367,11 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       mov	ax, #0
       mov	[PACMAN_TIMER], ax
       mov	[BLINKY_TIMER], ax
+      mov	[SCORE], ax
       
+      
+      mov	ax, #5
+      mov	[SCORE], ax
       
       
 Loop:
@@ -352,7 +397,7 @@ Next:
       add	ax, #1
       mov	[BLINKY_TIMER], ax
       
-      sub	ax, #PACMAN_WAIT
+      sub	ax, #BLINKY_WAIT
       bnz	Next1
       
       mov	ax, #0
@@ -407,7 +452,7 @@ Reroute:
 PacmanThink:
       
       mov	ax, [10]
-      add	ax, #1
+      add	ax, #1 
       mov	[10], ax
      
       
@@ -416,11 +461,111 @@ PacmanThink:
       
       mov	dx, @CharLogic
       jsr	dx
+      
+      mov	ax, [PACMAN_POS_X]
+      mov	bx, [PACMAN_POS_Y]
+      
+      mov	[PELLET_X], ax
+      mov	[PELLET_Y], bx
+      
+      mov	ax, [PELLET_DATA]
+      bnz	IncScore
+      rts
+      
+IncScore:
+      mov	ax, #1
+      mov	[PELLET_CLEAR], ax
+      mov	ax, #0
+      mov	[PELLET_CLEAR], ax
+      mov	ax, [SCORE]
+      add	ax, #1
+      mov	[SCORE], ax
+      
+      mov	ax, [SCORE]
+      mov	fx, @ToDecimal
+      jsr	fx
+      
       rts
       
       
 ; Functions      
 
+; Convert number to decimal
+; ax - value      
+ToDecimal:
+      
+      mov	ex, #0 ; digit counter
+      mov	[SCORE_DISP], ex
+      
+RepeatForDigit:      
+      ; Clear carry
+      sec	#0
+      mov	bx, #0 ; mod10
+      mov	dx, #16 ; bit counter
+      
+      
+ConvertLoop:      
+      rol	ax ; value
+      rol	bx ; mod10
+      
+      ; Set carry
+      sec	#1
+      
+      
+      ; Subtract 10
+      mov	cx, bx   
+      sbb	cx, #10
+      
+      bcc	Ignore
+      
+      ; Save value
+      mov	bx, cx  
+      
+Ignore: 
+      dec	dx
+      bnz	ConvertLoop
+      
+      add	ex, #0
+      Test:
+      bnz Test
+      
+      rol	ax
+      sec	#0
+      mov	cx, bx
+      mov	dx, ex
+      
+      add	dx, dx
+      add	dx, dx
+      add	dx, dx
+      
+      mov	fx, @ASLN
+      jsr	fx
+      
+      and	cx, #$0f
+      
+      mov	dx, [SCORE_DISP]
+      add	dx, cx
+      mov	[SCORE_DISP], dx
+      
+      inc	ex
+      
+      mov	dx, ex
+      sub	dx, #4
+      
+      bnz	RepeatForDigit
+      rts
+      
+      
+; Logic shift N times
+; cx - value, dx - times      
+ASLN:
+      add	dx, #0
+      bz	ASLNZero
+      asl	cx
+      dec	dx
+      bnz	ASLN
+ASLNZero:      
+      rts
       
 ; Pathfinding      
       

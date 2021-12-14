@@ -216,6 +216,12 @@ module CPU16(clk, reset, hold, busy,
                 regs[SP] <= regs[SP] - 1;
               regs[IP] <= regs[data_in[5:3]];
             end
+            //  10010??????????c	set/clear carry
+            16'b10010???????????: begin
+              carry <= data_in[0];
+              state <= S_SELECT;
+            end
+            
             //  1000????########	conditional branch
             16'b1000????????????: begin
               if (
