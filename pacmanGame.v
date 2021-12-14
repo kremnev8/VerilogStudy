@@ -370,7 +370,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       mov	[SCORE], ax
       
       
-      mov	ax, #5
+      mov	ax, #25
       mov	[SCORE], ax
       
       
@@ -493,55 +493,46 @@ IncScore:
 ; Convert number to decimal
 ; ax - value      
 ToDecimal:
-      
-      mov	ex, #0 ; digit counter
-      mov	[SCORE_DISP], ex
+      mov	ex, #0
+      mov	cx, #0
+      mov	[SCORE_DISP], cx
+      mov	bx, #0 ; mod10
       
 RepeatForDigit:      
       ; Clear carry
-      sec	#0
-      mov	bx, #0 ; mod10
-      mov	dx, #16 ; bit counter
+      mov	dx, #15 ; bit counter
       
       
-ConvertLoop:      
+ConvertLoop:   
       rol	ax ; value
       rol	bx ; mod10
       
       ; Set carry
       sec	#1
       
-      
       ; Subtract 10
       mov	cx, bx   
       sbb	cx, #10
       
-      bcc	Ignore
-      
+      bmi	Ignore
       ; Save value
-      mov	bx, cx  
+      mov	bx, cx 
       
 Ignore: 
+      
       dec	dx
       bnz	ConvertLoop
-      
-      add	ex, #0
-      Test:
-      bnz Test
       
       rol	ax
       sec	#0
       mov	cx, bx
       mov	dx, ex
       
-      add	dx, dx
-      add	dx, dx
-      add	dx, dx
+      asl	dx
+      asl	dx
       
       mov	fx, @ASLN
       jsr	fx
-      
-      and	cx, #$0f
       
       mov	dx, [SCORE_DISP]
       add	dx, cx
@@ -549,9 +540,8 @@ Ignore:
       
       inc	ex
       
-      mov	dx, ex
-      sub	dx, #4
-      
+      mov	cx, ex
+      sub	cx, #4
       bnz	RepeatForDigit
       rts
       
