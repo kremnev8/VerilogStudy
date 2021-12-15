@@ -52,7 +52,7 @@ module ALU(A, B, carry, aluop, Y);
       `OP_ADD:          Y = A + B;
       `OP_SUB:          Y = A - B;
       `OP_ADC:          Y = A + B + (carry?1:0);
-      `OP_SBB:          Y = A - B - (carry?1:0);
+      `OP_SBB:          Y = A - B - (carry?0:1);
     endcase
   
 endmodule
@@ -70,17 +70,20 @@ endmodule
 1000tttt ########	conditional branch
 */
 
-module CPU16(clk, reset, hold, busy,
-             address, data_in, data_out, write);
+module CPU16(clk, reset, busy,
+             address, data_in, data_out, write, keycode, keystrobe);
 
   input             clk;
   input             reset;
-  input	            hold;
+  reg	            hold = 0;
   output reg        busy;
   output reg [15:0] address;
   input      [15:0] data_in;
   output reg [15:0] data_out;
   output reg        write;
+  
+  input [7:0] keycode;
+  output reg keystrobe;
   
   // wait state for RAM?
   parameter RAM_WAIT = 1;
@@ -132,11 +135,16 @@ module CPU16(clk, reset, hold, busy,
           regs[IP] <= 16'h4000;
           write <= 0;
           state <= S_SELECT;
+          hold <= 0;
         end
 	// state 1: select opcode address
         S_SELECT: begin
           write <= 0;
           if (hold) begin
+            if (keycode == 8'ha0) begin
+              keystrobe <= 1;
+              hold <= 0;
+            end
             busy <= 1;
             state <= S_SELECT;
           end else begin
@@ -148,6 +156,7 @@ module CPU16(clk, reset, hold, busy,
         end
         // state 2: read/decode opcode
         S_DECODE: begin
+          keystrobe <= 0;
           // default next state
           state <= RAM_WAIT && data_in[11] ? S_COMPUTE_WAIT : S_COMPUTE;
           casez (data_in)
@@ -222,6 +231,12 @@ module CPU16(clk, reset, hold, busy,
               state <= S_SELECT;
             end
             
+            //  10011??????????c	set/clear carry
+            16'b10011???????????: begin
+              hold <= 1;
+              state <= S_SELECT;
+            end
+            
             //  1000????########	conditional branch
             16'b1000????????????: begin
               if (
@@ -246,7 +261,12 @@ module CPU16(clk, reset, hold, busy,
           // transfer ALU output to destination
           regs[rdest] <= Y[15:0];
           // set carry for certain operations (4-7,12-15)
-          if (aluop[2]) carry <= Y[16];
+          if (aluop[2]) begin
+            if (aluop == `OP_SBB)
+              carry <= ~Y[16];
+            else
+              carry <= Y[16];
+          end
           // set zero flag
           zero <= ~|Y[15:0];
           neg <= Y[15];

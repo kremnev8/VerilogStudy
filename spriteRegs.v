@@ -86,6 +86,7 @@ module SpriteRegs(clk, reset, reg_addr, in,  out, we, mapData, playerRot, frame,
   end
   
   always @(*) begin
+    
     if (reg_addr[5] == 0) 
       if (reg_addr[4:0] == 5'd26)
         out = score;

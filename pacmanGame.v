@@ -50,7 +50,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   wire ram_writeenable;
   
   input [7:0] keycode;
-  output reg keystrobe = 0;
+  //output reg keystrobe = 0;
   
   reg [7:0] value = 0;
   
@@ -236,14 +236,28 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     
     if (keycode[7]) begin
       case(keycode)
-        8'hf7: dir <= 0;
-        8'hf3: dir <= 2;
-        8'he1: dir <= 1;
-        8'he4: dir <= 3;
+        8'hf7: begin 
+          dir <= 0;
+          keystrobe <= 1; 
+        end
+        8'hf3: begin 
+          dir <= 2;
+          keystrobe <= 1; 
+        end
+        8'he1: begin 
+          dir <= 1;
+          keystrobe <= 1; 
+        end
+        8'he4: begin 
+          dir <= 3;
+          keystrobe <= 1; 
+        end
         default:;
       endcase
-      keystrobe <= 1; 
     end
+    
+    if (cpuKeystrobe)
+      keystrobe <= 1;
     
     if (mainCE) begin
       regs.sprite_reg[22] <= 1;
@@ -264,6 +278,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   reg [15:0] rom[0:1023];
   
   wire [15:0] regs_out;
+  output reg keystrobe;
   
   SpriteRegs regs(
     .clk(clk),
@@ -279,15 +294,20 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   );
  
   
+  wire cpuKeystrobe;
+  
   CPU16 cpu(
-          .clk(clk),
-          .reset(reset),
-          .hold(0),
-          .busy(busy),
-          .address(address_bus),
-          .data_in(to_cpu),
-          .data_out(from_cpu),
-          .write(write_enable));
+    .clk(clk),
+    .reset(reset),
+    //.hold(0),
+    .busy(busy),
+    .address(address_bus),
+    .data_in(to_cpu),
+    .data_out(from_cpu),
+    .write(write_enable),
+    .keycode(keycode),
+    .keystrobe(cpuKeystrobe)
+  );
 
   always @(posedge clk)
     if (write_enable) begin
@@ -370,10 +390,6 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       mov	[SCORE], ax
       
       
-      mov	ax, #25
-      mov	[SCORE], ax
-      
-      
 Loop:
       mov	ax, [FRAME_SYNC]
       sub	ax, #1
@@ -429,6 +445,7 @@ BlinkyThink:
       mov	cx, ax
       sub	cx, #4
       bz	Reroute
+      
       
       mov	bx, #BLINKY_POS_X
       mov	fx, @CharLogic
@@ -496,12 +513,12 @@ ToDecimal:
       mov	ex, #0
       mov	cx, #0
       mov	[SCORE_DISP], cx
-      mov	bx, #0 ; mod10
       
 RepeatForDigit:      
       ; Clear carry
-      mov	dx, #15 ; bit counter
-      
+      mov	dx, #16 ; bit counter
+      mov	bx, #0 ; mod10
+      sec	#0
       
 ConvertLoop:   
       rol	ax ; value
@@ -514,7 +531,7 @@ ConvertLoop:
       mov	cx, bx   
       sbb	cx, #10
       
-      bmi	Ignore
+      bcc	Ignore
       ; Save value
       mov	bx, cx 
       
@@ -522,6 +539,7 @@ Ignore:
       
       dec	dx
       bnz	ConvertLoop
+      
       
       rol	ax
       sec	#0
@@ -578,28 +596,34 @@ GetPath:
       ; bx - current enc pos
       
 SearchLoop: 
-      mov	cx, ax
+      mov	cx, ax ; Get value in map at target pos
       add	cx, #MAP_START
       mov	cx, [cx]
       and	cx, @$3ff
       
       bz	Failed
       
+      ; cx - encoded position from map
+      
       mov	dx, cx
       sub	dx, bx
       bz	PathFound
       
+      ; set target pos to encoded pos
       mov	ax, cx
       jmp	SearchLoop
       
 PathFound:  
-      mov	cx, bx
+      ; ax - move dir pos (encoded)
+      ; bx - current pos (encoded)
+      
+      mov	cx, bx ; decode ax
       mov	fx, @DecodePos
       jsr	fx
       push	ax
       push	bx
       
-      mov	ax, cx
+      mov	ax, cx ; decode bx
       mov	fx, @DecodePos
       jsr	fx
       
@@ -609,8 +633,16 @@ PathFound:
       pop	bx
       pop	ax
       
+      ; ax, bx - move dir pos
+      ; cx, dx - current pos
+      
       sub	ax, cx
       sub	bx, dx
+      
+           ; TODO
+      halt ; Check _if position is normalized
+           ; If not normalize and invert
+           ; Needed to make portals work
       
       mov	fx, @GetRotFromVector
       jsr	fx
@@ -676,6 +708,10 @@ EndBFS:
       
 ; Check _if position was not visited and can be reached      
 CheckPos:
+      
+      mov	ex, @TestPortals
+      jsr	ex
+      
       push	dx
       push	cx
       push	bx
@@ -948,6 +984,9 @@ TryMove: ; Move character to position
       inc 	fx
       add	bx, [fx]
       
+      mov	dx, @TestPortals
+      jsr	dx
+      
       push	ax
       push	bx
       
@@ -972,6 +1011,28 @@ TryMove: ; Move character to position
       mov	ax, #0
       rts
       
+TestPortals:
+      mov	ex, bx
+      sub	ex, #$0F
+      bnz	NotPortal
+      
+      mov	ex, ax
+      sub	ex, #2
+      bnz	TestRightPortal
+      
+      add	ax, #$19
+      rts
+      
+TestRightPortal:
+      mov	ex, ax
+      sub	ex, #$1B
+      bnz	NotPortal
+      
+      sub	ax, #$19
+      rts
+      
+NotPortal:
+      rts      
       
 IsValid: ; Check if character can enter this position
       mov	ex, ax ; Check X on boundary
