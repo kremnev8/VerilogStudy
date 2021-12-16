@@ -15,38 +15,60 @@ module SpriteRegs(clk, reset, reg_addr, in,  out, we, mapData, playerRot, frame,
     scoreDisp = 0;
   end
   
+`define PACMAN_POS_X 0
+`define PACMAN_POS_Y 1
+`define PACMAN_ROT   2
+`define PACMAN_TIMER 3 
+`define PACMAN_WAIT  4 
+`define PACMAN_LIFES 5
+  
+`define WORLD_POS_X  6
+`define WORLD_POS_Y  7
+
+`define BLINKY_POS_X 8
+`define BLINKY_POS_Y 9
+`define BLINKY_ROT   10
+`define BLINKY_TIMER 11
+`define BLINKY_WAIT  12 
+  
   //0 PacMan pos x
   //1 PacMan pos y
   //2 PacMan rot
   //3 PacMan timer
+  //4 PacMan wait
+  //5 PacMan lifes
   
-  //4 World map x pos
-  //5 World map y pos
+  //6 World map x pos
+  //7 World map y pos
   
-  //6 Blinky pos x
-  //7 Blinky pos y
-  //8 Blinky rot
-  //9 Blinky timer
+  //8 Blinky pos x
+  //9 Blinky pos y
+  //10 Blinky rot
+  //11 Blinky timer
+  //12 Blinky wait
   
-  //10 Pinky pos x
-  //11 Pinky pos y
-  //12 Pinky rot
-  //13 Pinky timer
+  //13 Pinky pos x
+  //14 Pinky pos y
+  //15 Pinky rot
+  //16 Pinky timer
+  //17 Pinky wait
    
-  //14 Inky pos x
-  //15 Inky pos y
-  //16 Inky rot
-  //17 Inky rot
+  //18 Inky pos x
+  //19 Inky pos y
+  //20 Inky rot
+  //21 Inky timer
+  //22 Inky wait
    
-  //18 Clyde pos x
-  //19 Clyde pos y
-  //20 Clyde rot
-  //21 Inky rot
-  //22 Frame lock register
+  //23 Clyde pos x
+  //24 Clyde pos y
+  //25 Clyde rot
+  //26 Clyde timer
+  //27 Clyde wait
+  //28 Frame lock register
   
-  //23 PelletX
-  //24 PelletY
-  //25 PelletClear
+  //29 PelletX
+  //30 PelletY
+  //31 PelletClear
   //26 Score
   //27 ScoreDisplay
   

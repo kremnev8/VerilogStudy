@@ -160,8 +160,6 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .shpos(hpos),
     .svpos(vpos), 
     .mainCE(mainCE)
-    //.cpuCE(cpuCE),
-    //.frameTime(ftime)
   );
   
   Pacman pacman(
@@ -170,10 +168,9 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .shpos(hpos), 
     .svpos(vpos), 
     .col(pacmanColor), 
-    .direction(regs.sprite_reg[2][1:0]),
-    .xpos(regs.sprite_reg[0][4:0]), 
-    .ypos(regs.sprite_reg[1][4:0])
-   // .mapData(mapValues[pacmanX])
+    .direction(regs.sprite_reg[`PACMAN_ROT][1:0]),
+    .xpos(regs.sprite_reg[`PACMAN_POS_X][4:0]), 
+    .ypos(regs.sprite_reg[`PACMAN_POS_Y][4:0])
   );
   
   Blinky blinky(
@@ -182,9 +179,9 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .shpos(hpos), 
     .svpos(vpos), 
     .col(blinkyColor), 
-    .direction(regs.sprite_reg[8][1:0]),
-    .xpos(regs.sprite_reg[6][4:0]), 
-    .ypos(regs.sprite_reg[7][4:0])
+    .direction(regs.sprite_reg[`BLINKY_ROT][1:0]),
+    .xpos(regs.sprite_reg[`BLINKY_POS_X][4:0]), 
+    .ypos(regs.sprite_reg[`BLINKY_POS_Y][4:0])
   );
   
   wire [15:0] digitData  = regs.scoreDisp;
@@ -639,10 +636,6 @@ PathFound:
       sub	ax, cx
       sub	bx, dx
       
-           ; TODO
-      halt ; Check _if position is normalized
-           ; If not normalize and invert
-           ; Needed to make portals work
       
       mov	fx, @GetRotFromVector
       jsr	fx
@@ -1056,6 +1049,15 @@ NotValid:
       rts
 
 GetRotFromVector:
+      push	cx
+      push	dx
+      
+      mov	fx, @EnsureNormalized
+      jsr	fx
+      
+      pop	dx
+      pop	cx
+      
       add	ax, #0
       bnz	XNotZero
       mov	ax, bx
@@ -1064,6 +1066,49 @@ GetRotFromVector:
       
 XNotZero:   
       add	ax, #2
+      rts
+
+; ax, bx - input vector      
+EnsureNormalized:
+      add	ax, #0
+      bz	XZero
+      
+      add	bx, #0
+      bz	YZero
+      rts
+      
+XZero:
+      mov	cx, bx
+      bpl	XPlus
+      xor	cx, @$ffff
+      add	cx, #1
+      mov	dx, #2
+      
+XPlus:
+      sub	dx, #1
+      sub	cx, #1
+      bz	Valid
+      
+      mov	bx, dx
+      rts
+      
+YZero:
+      
+      mov	cx, ax
+      bpl	YPlus
+      xor	cx, @$ffff
+      add	cx, #1
+      mov	dx, #2
+      
+YPlus:
+      sub	dx, #1
+      sub	cx, #1
+      bz	Valid
+      
+      mov	ax, dx
+      rts
+      
+Valid:
       rts
       
 GetVector: ; Calculate vector representing rotation value
