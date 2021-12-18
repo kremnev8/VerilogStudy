@@ -1,7 +1,7 @@
 
 module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   
-  parameter [2:0] colorMap [0:3] = '{`BLACK, `RED, `BLUE,  `WHITE};
+  parameter [11:0] colorMap = {`WHITE, `BLUE, `RED, `BLACK};
   
   parameter WAIT_FRAME_TIME = 20 / (60 / `FRAME_RATE);
   
@@ -52,7 +52,7 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   
   always @(posedge clk) begin
     
-    col <= colorMap[colIn];
+    col <= colorMap[colIn*3+:3];
     
     if (ce) begin
       counter <= counter + 1'b1;

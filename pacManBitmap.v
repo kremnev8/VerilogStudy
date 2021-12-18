@@ -153,3 +153,56 @@ module PacManBitmap(animState, direction, yin, xin, out);
   end
   
 endmodule
+
+module PacManLifeBitmap(shouldDraw, yin, xin, out);
+  
+  input shouldDraw;  
+  input [3:0] yin;
+  input [3:0] xin;
+  output out;
+  
+  reg [15:0] pacman[0:31];
+  
+  wire [4:0] caseexpr = {shouldDraw, yin};
+  
+  assign out = pacman[caseexpr][xin];
+  
+  initial begin
+    /*{w:16,h:16,bpw:16,count:2}*/
+    pacman['h00] = 16'b0;
+    pacman['h01] = 16'b0;
+    pacman['h02] = 16'b0;
+    pacman['h03] = 16'b0;
+    pacman['h04] = 16'b0;
+    pacman['h05] = 16'b0;
+    pacman['h06] = 16'b0;
+    pacman['h07] = 16'b0;
+    pacman['h08] = 16'b0;
+    pacman['h09] = 16'b0;
+    pacman['h0A] = 16'b0;
+    pacman['h0B] = 16'b0;
+    pacman['h0C] = 16'b0;
+    pacman['h0D] = 16'b0;
+    pacman['h0E] = 16'b0;
+    pacman['h0F] = 16'b0;
+    
+    pacman['h10] = 16'b0;
+    pacman['h11] = 16'b1111100000;
+    pacman['h12] = 16'b111111111000;
+    pacman['h13] = 16'b1111111111100;
+    pacman['h14] = 16'b1111111111100;
+    pacman['h15] = 16'b11111111110;
+    pacman['h16] = 16'b11111110;
+    pacman['h17] = 16'b11110;
+    pacman['h18] = 16'b11111110;
+    pacman['h19] = 16'b11111111110;
+    pacman['h1A] = 16'b1111111111100;
+    pacman['h1B] = 16'b1111111111100;
+    pacman['h1C] = 16'b111111111000;
+    pacman['h1D] = 16'b1111100000;
+    pacman['h1E] = 16'b0;
+    pacman['h1F] = 16'b0;
+    
+  end
+  
+endmodule

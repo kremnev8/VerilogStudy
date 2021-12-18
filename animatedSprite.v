@@ -24,7 +24,7 @@ module AnimatedSprite(clk, shpos, svpos,
   reg [7:0] frameCounter = 0;
   
   wire signed [9:0] deltaX = shpos / 2 - (xpos + SPRITE_SIZE/2);
-  wire signed [9:0] deltaY = svpos / 2- (ypos + SPRITE_SIZE/2);
+  wire signed [9:0] deltaY = svpos / 2 - (ypos + SPRITE_SIZE/2);
   
   always @(posedge clk) begin
     if (deltaX > 0 && deltaY > 0 && deltaX < SPRITE_SIZE && deltaY < SPRITE_SIZE) begin

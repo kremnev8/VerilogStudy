@@ -1,12 +1,18 @@
 
-module ColorMixer (gridColor, pelletColor, numbersColor, pacmanColor, blinkyColor, rgb);
+module ColorMixer (gridColor, pelletColor, 
+                   text1Color, lifeColor, numbersColor, 
+                   pacmanColor, blinkyColor, pinkyColor, rgb);
   
   input [2:0] gridColor;
   input [2:0] pelletColor;
+  input [2:0] text1Color;
+  input [2:0] lifeColor;
+  
   input [2:0] numbersColor;
   
   input [2:0] pacmanColor;
   input [2:0] blinkyColor;
+  input [2:0] pinkyColor;
   
   output [3:0] rgb;
   
@@ -17,10 +23,18 @@ module ColorMixer (gridColor, pelletColor, numbersColor, pacmanColor, blinkyColo
       totalColor = gridColor;
     else if (numbersColor != 0)
       totalColor = numbersColor;
+    else if (text1Color != 0)
+      totalColor = text1Color;
+    else if (lifeColor != 0)
+      totalColor = lifeColor;
+    
     else if (pacmanColor != 0)
       totalColor = pacmanColor; 
     else if (blinkyColor != 0)
       totalColor = blinkyColor; 
+    else if (pinkyColor != 0)
+      totalColor = pinkyColor; 
+    
     else if (pelletColor != 0)
       totalColor = pelletColor;
     else

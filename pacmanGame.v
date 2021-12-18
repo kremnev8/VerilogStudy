@@ -1,28 +1,32 @@
+`include "enums.vh"
+
 `include "hvsync_generator.v"
 `include "ram.v"
+`include "cpu16.v"
+`include "spriteRegs.v"
+`include "AccessManager.v"
+`include "ColorMixer.v"
+
+
 `include "tileMap.v"
 `include "MapData.v"
 `include "mapCellsEvaluator.v"
 `include "cellStateCL.v"
-`include "pacManBitmap.v"
-`include "animatedSprite.v"
-
-`include "enums.vh"
-
-`include "pacmanController.v"
-`include "AccessManager.v"
-
-`include "ColorMixer.v"
-`include "cpu16.v"
-`include "spriteRegs.v"
-`include "blinkyBitmap.v"
-
 
 `include "pelletRenderer.v"
 `include "pelletBitmap.v"
-
 `include "pelletData.v"
+
+`include "pacManBitmap.v"
+`include "animatedSprite.v"
+`include "pacmanController.v"
+
+`include "blinkyBitmap.v"
+
 `include "digits10.v"
+`include "digitRenderer.v"
+
+`include "alphabet.v"
 
 
 
@@ -103,7 +107,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   
   MapData map(
     .addr_a(mapDataAddr), 
-    .addr_b(regs.sprite_reg[5][4:0]), 
+    .addr_b(regs.sprite_reg[`WORLD_POS_Y][4:0]), 
     .out_a(mapValues), 
     .out_b(mapValues_b)
   );
@@ -134,9 +138,9 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .color(pelletColor)
   );
   
-  wire [4:0] cpuPelletX = regs.sprite_reg[23][4:0];
-  wire [4:0] cpuPelletY = regs.sprite_reg[24][4:0];
-  wire cpuPelletClear = regs.sprite_reg[25][0];
+  wire [4:0] cpuPelletX = regs.sprite_reg[`PELLET_X][4:0];
+  wire [4:0] cpuPelletY = regs.sprite_reg[`PELLET_Y][4:0];
+  wire cpuPelletClear = regs.sprite_reg[`PELLET_CLEAR][0];
   wire cpuPelletData;
   
   PelletData data(
@@ -184,46 +188,157 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .ypos(regs.sprite_reg[`BLINKY_POS_Y][4:0])
   );
   
-  wire [15:0] digitData  = regs.scoreDisp;
+  wire [2:0] pinkyColor;
   
-  wire [2:0] digitYofs = vpos[5:3];
-  wire [9:0] movHpos = hpos - 70;
-  wire [2:0] digitXofs = movHpos[4:2];
-  wire [2:0] curDigit = movHpos[7:5];
-  
-  wire [3:0] curDData;
-  
-  always @(*) begin
-    if (curDigit == 0)
-      curDData = 0;
-    else
-      curDData = digitData[~curDigit*4+: 4];
-  end
-  
-  wire [4:0] digitOut;
-  
-  digits10 digits(
-    .digit(curDData), 
-    .yofs(digitYofs), 
-    .bits(digitOut)
+  Blinky
+  #(
+    .colorMap({`WHITE, `BLUE, `PINK, `BLACK})
+  )
+  pinky(
+    .clk(clk), 
+    .ce(mainCE), 
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .col(pinkyColor), 
+    .direction(regs.sprite_reg[`PINKY_ROT][1:0]),
+    .xpos(regs.sprite_reg[`PINKY_POS_X][4:0]), 
+    .ypos(regs.sprite_reg[`PINKY_POS_Y][4:0])
   );
-
-  wire [2:0] tilemapColor;	
-  wire [2:0] gridColor = ( vpos < 10'h1e0 && hpos < 10'h1e0 ? tilemapColor : 3'd0);
   
-  wire digitFilter = ( vpos > 10'h30 && vpos < 10'h70 && hpos > 10'h1c5 && hpos < 10'h270 ? digitOut[~digitXofs] : 1'd0);
-  wire [2:0] digitColor = digitFilter ? `WHITE : `BLACK;
+  wire [2:0] digitXofs;
+  wire [2:0] digitYofs;
+  wire [3:0] digitData;
+  wire digitColIn;
+  
+  CharacterRenderer
+  #(
+    .X_OFFSET(70)
+  )
+  digits(
+    .digitData({regs.scoreDisp, 4'b0}), 
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .digit(digitData),
+    .xofs(digitXofs), 
+    .yofs(digitYofs), 
+    .colIn(digitColIn), 
+    .colOut(digitColor),
+    .color(`WHITE)
+  );
+  
+  digits10 DigitBitmap(
+    .digit(digitData), 
+    .yofs(digitYofs), 
+    .xofs(digitXofs), 
+    .bits(digitColIn)
+  );
+  
+  wire [2:0] alphaXofs;
+  wire [2:0] alphaYofs;
+  wire [4:0] alphaData;
+  wire alphaColIn;
+  
+  reg [49:0] textData = {`SPACE, `SPACE, `EXCLAIM, `Y, `D, `A, `E, `R, `SPACE, `SPACE};
+  
+  reg [49:0] textData1 = {`SPACE, `R, `E, `V, `O, `SPACE, `E, `M, `A, `G};
+  
+  wire [49:0] displayText = regs.sprite_reg[`DISPLAY_FLAGS][1] ? textData1 : textData;
+  wire [2:0] displayColor = regs.sprite_reg[`DISPLAY_FLAGS][1] ? `RED : `YELLOW;
+  
+  wire [2:0] textColor;
+  
+  
+  CharacterRenderer 
+  #(
+    .DATA_WIDTH(5),
+    .DIGITS(10),
+    .X_POS(150),
+    .Y_POS(270),
+    .X_SCALE(2),
+    .Y_SCALE(2),
+    .DIRECTION(0)
+  )
+  readyDisp(
+    .digitData(displayText), 
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .digit(alphaData),
+    .xofs(alphaXofs), 
+    .yofs(alphaYofs), 
+    .colIn(alphaColIn), 
+    .colOut(textColor),
+    .color(displayColor)
+  );
+  
+  
+  Alphabet alphaBitmap(
+    .character(alphaData), 
+    .yin(alphaYofs), 
+    .xin(alphaXofs), 
+    .out(alphaColIn)
+  );
+  
+  wire [3:0] lifeXofs;
+  wire [3:0] lifeYofs;
+  wire lifeData;
+  wire lifeColIn;
+  wire [2:0] lifeColor;
+  
+  reg [2:0] lives = {regs.sprite_reg[`PACMAN_LIFES] > 2, regs.sprite_reg[`PACMAN_LIFES] > 1, regs.sprite_reg[`PACMAN_LIFES] > 0};
+  
+  
+  CharacterRenderer 
+  #(
+    .SPRITE_SIZE(16),
+    .DATA_WIDTH(1),
+    .DIGITS(3),
+    .X_POS(465),
+    .Y_POS(150),
+    .X_SCALE(2),
+    .Y_SCALE(2),
+    .DIRECTION(0)
+  )
+  lifeDisp(
+    .digitData(lives), 
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .digit(lifeData),
+    .xofs(lifeXofs), 
+    .yofs(lifeYofs), 
+    .colIn(lifeColIn), 
+    .colOut(lifeColor),
+    .color(`YELLOW)
+  );
+  
+  
+  PacManLifeBitmap lifeBitmap(
+    .shouldDraw(lifeData), 
+    .yin(lifeYofs), 
+    .xin(lifeXofs), 
+    .out(lifeColIn)
+  );
+  
+  wire [2:0] digitColor;
+  
+  wire [2:0] tilemapColor;	
+  wire [2:0] gridColor = ( vpos < 10'h1e0 && hpos < 10'h1c0 ? tilemapColor : 3'd0);
   
   wire [2:0] pacmanColor;
   wire [2:0] blinkyColor;
+  
+  wire [2:0] text1Filtered = regs.sprite_reg[`DISPLAY_FLAGS][0] ? textColor : `BLACK;
  
   
   ColorMixer mixer(
     .gridColor(gridColor), 
     .numbersColor(digitColor),
+    .text1Color(text1Filtered),
+    .lifeColor(lifeColor),
+    
     .pelletColor(pelletColor),
     .pacmanColor(pacmanColor), 
     .blinkyColor(blinkyColor),
+    .pinkyColor(pinkyColor),
     .rgb(rgb)
   );
   
@@ -257,7 +372,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       keystrobe <= 1;
     
     if (mainCE) begin
-      regs.sprite_reg[22] <= 1;
+      regs.sprite_reg[`FRAME_SYNC] <= 1;
     end
     
   end
@@ -284,7 +399,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .in(from_cpu),
     .out(regs_out), 
     .we(write_enable && address_bus[15:6] == 0),
-    .mapData(mapValues_b[regs.sprite_reg[4][4:0]]), 
+    .mapData(mapValues_b[regs.sprite_reg[`WORLD_POS_X][4:0]]), 
     .playerRot(dir),
     .frame(timeCounter),
     .pelletData(cpuPelletData)
@@ -335,58 +450,148 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .arch cpu16arch
 .org 0x4000
 .len 1024
+
 .define PACMAN_POS_X 0
 .define PACMAN_POS_Y 1
 .define PACMAN_ROT   2
 .define PACMAN_TIMER 3 
-      
-.define PACMAN_WAIT  4
-
-.define WORLD_POS_X  4
-.define WORLD_POS_Y  5
-
-.define BLINKY_POS_X 6
-.define BLINKY_POS_Y 7
-.define BLINKY_ROT   8
-.define BLINKY_TIMER 9 
-      
-.define BLINKY_WAIT  6      
-      
-.define FRAME_SYNC   22       
-.define PELLET_X 23
-.define PELLET_Y 24     
-.define PELLET_CLEAR 25
-.define PELLET_DATA 35      
-.define SCORE 26
-.define SCORE_DISP 27
-      
-.define MAP_DATA 32
-.define PLAYER_ROT 33
+.define PACMAN_WAIT  4 
+.define PACMAN_LIFES 5
  
-; Core loop      
+.define WORLD_POS_X  6
+.define WORLD_POS_Y  7
+
+.define BLINKY_POS_X 8
+.define BLINKY_POS_Y 9
+.define BLINKY_ROT   10
+.define BLINKY_TIMER 11
+.define BLINKY_AI  12 
+.define BLINKY_AI_TIMER  13 
+
+.define PINKY_POS_X 14
+.define PINKY_POS_Y 15
+.define PINKY_ROT   16
+.define PINKY_TIMER 17
+.define PINKY_AI  18
+.define PINKY_AI_TIMER  19 
+
+.define INKY_POS_X 20
+.define INKY_POS_Y 21
+.define INKY_ROT   22
+.define INKY_TIMER 23
+.define INKY_AI  24
+.define INKY_AI_TIMER  25 
+
+.define CLYDE_POS_X 26
+.define CLYDE_POS_Y 27
+.define CLYDE_ROT   28
+.define CLYDE_TIMER 29
+.define CLYDE_AI  30
+.define CLYDE_AI_TIMER  31 
+
+  
+.define FRAME_SYNC   32      
+.define PELLET_X 33
+.define PELLET_Y 34   
+.define PELLET_CLEAR 35
+.define DISPLAY_FLAGS 36
+
+.define SCORE 37
+.define SCORE_DISP 38
+
+.define MAP_DATA 48
+.define PLAYER_ROT 49
+.define FRAME_COUNT 50
+.define PELLET_DATA 51 
+      
+.define CURRENT_ENEMY $C8   
+.define START_TIMER $C9     
+      
+.define ENEMY_CHASE_TARGET_X $CA
+.define ENEMY_CHASE_TARGET_Y $CB     
+      
+.define ENEMY_SCATTER_TARGET_X $Cc
+.define ENEMY_SCATTER_TARGET_Y $CD 
+      
+.define PACMAN_MOVE_SPEED 4      
+.define BLINKY_MOVE_SPEED 6 
+.define PINKY_MOVE_SPEED 6    
+      
+      
+Init:  
       mov	sp, @$2fff
-      mov	bx, #2
-      mov	[PACMAN_POS_X], bx
-      mov	[PACMAN_POS_Y], bx
-      mov	bx, #27
-      mov	[BLINKY_POS_X], bx
-      mov	[BLINKY_POS_Y], bx
-      
-      mov	ax, #BLINKY_POS_X
-      mov	[$C8], ax
-      
-      mov	ax, [BLINKY_POS_X]
-      mov	bx, [BLINKY_POS_Y]
-      
-      mov	fx, @FindBFS
-      jsr	fx
-      
       mov	ax, #0
-      mov	[PACMAN_TIMER], ax
-      mov	[BLINKY_TIMER], ax
       mov	[SCORE], ax
       
+      mov	ax, #4
+      mov	[PACMAN_WAIT], ax
+      mov	ax, #3
+      mov	[PACMAN_LIFES], ax
       
+      mov	fx, @InitQueue
+      jsr	fx
+      
+      mov	fx, @MapClear
+      jsr	fx
+      
+Start:
+      mov	sp, @$2fff
+      mov	ax, @30
+      mov	[START_TIMER], ax
+      
+      mov	bx, #15
+      mov	[PACMAN_POS_X], bx
+      mov	bx, #24
+      mov	[PACMAN_POS_Y], bx
+      
+      mov	bx, #15
+      mov	[BLINKY_POS_X], bx
+      mov	bx, #12
+      mov	[BLINKY_POS_Y], bx
+      
+      mov	bx, #15
+      mov	[PINKY_POS_X], bx
+      mov	bx, #15
+      mov	[PINKY_POS_Y], bx
+      
+      mov	ax, #1
+      mov	[PACMAN_TIMER], ax
+      mov	[BLINKY_AI], ax
+      mov	[PINKY_AI], ax
+      
+      mov	ax, #1
+      mov	[BLINKY_TIMER], ax
+      mov	ax, #1
+      mov	[PINKY_TIMER], ax
+
+      mov	ax, #1
+      mov	[DISPLAY_FLAGS], ax
+      
+      mov	ax, #0
+      mov	[BLINKY_AI_TIMER], ax
+      mov	[PINKY_AI_TIMER], ax
+      
+      
+; Start waiting
+      
+StartWait:
+      
+      mov	ax, [FRAME_SYNC]
+      sub	ax, #1
+      bnz	StartWait
+      mov	[FRAME_SYNC], ax
+      
+      mov	ax, [START_TIMER]
+      sub	ax, #1
+      mov	[START_TIMER], ax
+      
+      bnz	StartWait
+      
+      mov	ax, #0
+      mov	[DISPLAY_FLAGS], ax
+      
+      
+; Core loop       
 Loop:
       mov	ax, [FRAME_SYNC]
       sub	ax, #1
@@ -397,77 +602,326 @@ Loop:
       add	ax, #1
       mov	[PACMAN_TIMER], ax
       
-      sub	ax, #PACMAN_WAIT
-      bmi	Next
+      mov	bx, [PACMAN_WAIT]
+      sub	ax, bx
+      bnz	Blinky
       
       mov	ax, #0
       mov	[PACMAN_TIMER], ax
       mov	fx, @PacmanThink
       jsr	fx
       
-Next:    
+Blinky:    
       mov	ax, [BLINKY_TIMER]
       add	ax, #1
       mov	[BLINKY_TIMER], ax
       
-      sub	ax, #BLINKY_WAIT
-      bnz	Next1
+      sub	ax, #BLINKY_MOVE_SPEED
+      bnz	Pinky
       
       mov	ax, #0
       mov	[BLINKY_TIMER], ax
       
-      mov	fx, @BlinkyThink
+      mov	ax, #27
+      mov	[ENEMY_SCATTER_TARGET_X], ax
+      
+      mov	ax, #2
+      mov	[ENEMY_SCATTER_TARGET_Y], ax
+      
+      mov	ax, [PACMAN_POS_X]
+      mov	[ENEMY_CHASE_TARGET_X], ax
+      
+      mov	ax, [PACMAN_POS_Y]
+      mov	[ENEMY_CHASE_TARGET_Y], ax
+      
+      mov	ex, #BLINKY_POS_X
+      mov	fx, @EnemyThink
       jsr	fx
       
-Next1:      
+Pinky: 
+      mov	ax, [SCORE]
+      sub	ax, #30
+      bmi	EndLoop
       
       
+      mov	ax, [PINKY_TIMER]
+      add	ax, #1
+      mov	[PINKY_TIMER], ax
+      
+      sub	ax, #PINKY_MOVE_SPEED
+      bnz	EndLoop
+      
+      mov	ax, #0
+      mov	[PINKY_TIMER], ax
+      
+      mov	ax, #2
+      mov	[ENEMY_SCATTER_TARGET_X], ax
+      
+      mov	ax, #2
+      mov	[ENEMY_SCATTER_TARGET_Y], ax
+      
+      mov	ax, [PACMAN_ROT]
+      bz	BugDir
+      
+      mov	dx, @GetVector
+      jsr	dx
+      
+      asl	ax
+      asl	ax
+      
+      asl	bx
+      asl	bx
+      
+      mov	cx, [PACMAN_POS_X]
+      add	ax, cx
+      mov	[ENEMY_CHASE_TARGET_X], ax
+      
+      mov	cx, [PACMAN_POS_Y]
+      add	bx, cx
+      mov	[ENEMY_CHASE_TARGET_Y], bx
+
+      jmp	PinkyMove
+BugDir:      
+      mov	ax, [PACMAN_POS_X]
+      sub	ax, #4
+      mov	[ENEMY_CHASE_TARGET_X], ax
+      
+      mov	bx, [PACMAN_POS_Y]
+      sub	bx, #4
+      mov	[ENEMY_CHASE_TARGET_Y], bx
+      
+PinkyMove:
+      
+      mov	fx, @FindValidChasePos
+      jsr	fx
+      
+      
+      mov	ex, #PINKY_POS_X
+      mov	fx, @EnemyThink
+      jsr	fx
+      
+EndLoop:      
       jmp Loop
 
       
       
 ; Character logic
       
+FindValidChasePos:
+      mov	cx, [ENEMY_CHASE_TARGET_X]
+      mov	dx, [ENEMY_CHASE_TARGET_Y]
       
-BlinkyThink:
-      mov	ax, [PACMAN_POS_X]
-      mov	bx, [PACMAN_POS_Y]
+      mov	ax, cx
+      mov	bx, dx
       
-      mov	cx, [BLINKY_POS_X]
-      mov	dx, [BLINKY_POS_Y]
+      mov	ex, @$fffe
+      mov	fx, @$fffe
+      
+CheckCurrentPos:
+      push	ax
+      push	bx
+      
+      push	ex
+      push	fx
+      
+      mov	fx, @IsValid
+      jsr	fx
+      
+      pop	fx
+      pop	ex
+      
+      add	ax, #0
+      bnz	ItsValid
+      
+      pop	bx
+      pop	ax
+      
+      add	ex, #1
+      push	ex
+      sub	ex, #2
+      bz	IncY
+      pop	ex
+      jmp	PrepForNext
+      
+IncY:  
+      pop	ex
+      mov	ex, @$fffe
+      add	fx, #1
+      push	fx
+      sub	fx, #2
+      bz	NotFound
+      pop	fx
+      
+PrepForNext:   
+      mov	ax, cx
+      mov	bx, dx
+      
+      add	ax, ex
+      add	bx, fx
+      jmp	CheckCurrentPos
+      
+NotFound: 
+      pop	fx
+      rts
+      
+ItsValid:  
+      pop	bx
+      pop	ax
+      
+      mov	[ENEMY_CHASE_TARGET_X], ax
+      mov	[ENEMY_CHASE_TARGET_Y], bx
+      
+      rts
+      
+; ex - current enemy index   
+EnemyThink:
+      mov	ax, [ex+4]
+      bz	Chase
+      sub	ax, #1
+      bz	Scatter
+      rts
+
+Scatter: 
+      mov	bx, ex
+      add	bx, #5
+      
+      mov 	ax, [bx]
+      add	ax, #1
+      mov	[bx], ax
+      
+      sub	ax, #7
+      bz	StopScatter
+      
+      mov	ax, [ENEMY_SCATTER_TARGET_X]
+      mov	bx, [ENEMY_SCATTER_TARGET_Y]
+      
+      mov	cx, [ex]
+      mov	dx, [ex+1]
+      
+      jmp	Movement
+      
+Chase:    
+      mov	bx, ex
+      add	bx, #5
+      
+      mov 	ax, [bx]
+      add	ax, #1
+      mov	[bx], ax
+      
+      sub	ax, #30
+      bz	StopChase     
+      
+      mov	ax, [ENEMY_CHASE_TARGET_X]
+      mov	bx, [ENEMY_CHASE_TARGET_Y]
+      
+      push	ex
+      
+      mov	fx, @IsValid
+      jsr	fx
+      
+      pop	ex
+      
+      add	ax, #0
+      bz	CantMove
+      
+      mov	ax, [ENEMY_CHASE_TARGET_X]
+      mov	bx, [ENEMY_CHASE_TARGET_Y]
+      
+      mov	cx, [ex]
+      mov	dx, [ex+1]
+      
+Movement:  
+      
+      push	ax
+      push	bx
+      push	cx
+      push	dx
+      push	ex
       
       mov	fx, @GetPath
       jsr	fx
+      
       
       mov	cx, ax
       sub	cx, #4
       bz	Reroute
       
+      pop	cx
+      pop	cx
+      pop	cx
+      pop	cx
+      pop	cx
       
-      mov	bx, #BLINKY_POS_X
+      mov	bx, ex
       mov	fx, @CharLogic
       jsr	fx
       rts
       
+CantMove:  
+      rts
+      
 Reroute:
       
-      mov	ax, #BLINKY_POS_X
-      mov	[$C8], ax
+      mov	ax, ex
+      mov	[CURRENT_ENEMY], ax
       
-      mov	ax, [BLINKY_POS_X]
-      mov	bx, [BLINKY_POS_Y]
+      mov	ax, [ex]
+      mov	bx, [ex+1]
       
       mov	fx, @FindBFS
       jsr	fx
       
-      rts    
+      pop	ex
+      pop	dx
+      pop	cx
+      pop	bx
+      pop	ax
+      
+      mov	fx, @GetPath
+      jsr	fx
+      
+      
+      mov	cx, ax
+      sub	cx, #4
+      bz	CantMove
+      
+      mov	bx, ex
+      mov	fx, @CharLogic
+      jsr	fx
+      rts
+      
+      rts 
+      
+StopScatter:      
+      mov	bx, ex
+      mov	ax, #0
+      add	bx, #4
+      
+      mov	[bx], ax
+      inc	bx
+      mov	[bx], ax
+      rts
+      
+      
+StopChase:  
+      mov	bx, ex
+      add	bx, #4
+      
+      mov	ax, #1
+      mov	[bx], ax
+      
+      inc	bx
+      mov	ax, #0
+      mov	[bx], ax
+      
+      rts      
       
       
 PacmanThink:
       
-      mov	ax, [10]
-      add	ax, #1 
-      mov	[10], ax
+      ;mov	ax, [10]
+      ;add	ax, #1 
+      ;mov	[10], ax
      
       
       mov	ax, [PLAYER_ROT]
@@ -475,6 +929,10 @@ PacmanThink:
       
       mov	dx, @CharLogic
       jsr	dx
+      
+      mov	ax, #BLINKY_POS_X
+      mov	fx, @TestCollision
+      jsr	fx
       
       mov	ax, [PACMAN_POS_X]
       mov	bx, [PACMAN_POS_Y]
@@ -491,16 +949,72 @@ IncScore:
       mov	[PELLET_CLEAR], ax
       mov	ax, #0
       mov	[PELLET_CLEAR], ax
+      
       mov	ax, [SCORE]
       add	ax, #1
       mov	[SCORE], ax
+      
       
       mov	ax, [SCORE]
       mov	fx, @ToDecimal
       jsr	fx
       
       rts
+
       
+TestCollision:
+      mov	cx, ax
+      
+      mov	ax, [PACMAN_POS_X]
+      mov	bx, [cx]
+      sub	ax, bx
+      
+      mov	dx, @Abs
+      jsr	dx
+      sub	ax, #2
+      
+      bpl	NoCollision
+      
+      mov	ax, [PACMAN_POS_Y]
+      mov	bx, [cx+1]
+      sub	ax, bx
+      
+      mov	dx, @Abs
+      jsr	dx
+      sub	ax, #2
+      
+      bpl	NoCollision
+      
+      ; Collision
+      
+      mov	ax, [PACMAN_LIFES]
+      sub	ax, #1
+      mov	[PACMAN_LIFES], ax
+      
+      bz	GameOver
+      jmp	Start
+      
+NoCollision:
+      rts
+      
+      
+GameOver:
+      mov	ax, #3
+      mov	[DISPLAY_FLAGS], ax
+      
+      halt
+      jmp Init
+
+Abs:
+      add	ax, #0
+      bpl	AbsPlus
+      
+      xor	ax, @$ffff
+      add	ax, #1
+      
+AbsPlus:       
+      rts
+     
       
 ; Functions      
 
@@ -773,7 +1287,7 @@ AddRet:
       rts  
       
 GetBack:
-      mov	ex, [$c8]
+      mov	ex, [CURRENT_ENEMY]
 
       mov	ax, [ex+2]
       add	ax, #2

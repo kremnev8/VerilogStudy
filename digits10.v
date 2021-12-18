@@ -2,27 +2,19 @@
 `ifndef DIGITS10_H
 `define DIGITS10_H
 
-`include "hvsync_generator.v"
 
-/*
-ROM module with 5x5 bitmaps for the digits 0-9.
-
-digits10_case - Uses the case statement.
-digits10_array - Uses an array and initial block.
-
-These two modules are functionally equivalent.
-*/
 
 // module for 10-digit bitmap ROM
-module digits10(digit, yofs, bits);
+module digits10(digit, yofs, xofs, bits);
   
   input [3:0] digit;		// digit 0-9
   input [2:0] yofs;		// vertical offset (0-4)
-  output [4:0] bits;		// output (5 bits)
+  input [2:0] xofs;
+  output bits;		// output (5 bits)
 
   reg [4:0] bitarray[0:15][0:4]; // ROM array (16 x 5 x 5 bits)
 
-  assign bits = bitarray[digit][yofs];	// assign module output
+  assign bits = bitarray[digit][yofs][~xofs];	// assign module output
   
   integer i,j;
   
@@ -92,45 +84,6 @@ module digits10(digit, yofs, bits);
       for (j = 0; j <= 4; j++) 
         bitarray[i][j] = 0; 
   end
-endmodule
-
-// test module
-module test_numbers_top(clk, reset, hsync, vsync, rgb);
-  
-  input clk, reset;
-  output hsync, vsync;
-  output [2:0] rgb;
-
-  wire display_on;
-  wire [8:0] hpos;
-  wire [8:0] vpos;
-  
-  hvsync_generator hvsync_gen(
-    .clk(clk),
-    .reset(reset),
-    .hsync(hsync),
-    .vsync(vsync),
-    .display_on(display_on),
-    .hpos(hpos),
-    .vpos(vpos)
-  );
-  
-  wire [3:0] digit = hpos[7:4];
-  wire [2:0] xofs = hpos[3:1];
-  wire [2:0] yofs = vpos[3:1];
-  wire [4:0] bits;
-  
-  digits10_array numbers(
-    .digit(digit),
-    .yofs(yofs),
-    .bits(bits)
-  );
-
-  wire r = display_on && 0;
-  wire g = display_on && bits[xofs ^ 3'b111];
-  wire b = display_on && 0;
-  assign rgb = {b,g,r};
-
 endmodule
 
 `endif
