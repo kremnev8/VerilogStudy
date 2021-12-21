@@ -76,7 +76,7 @@ module SpriteRegs(clk, reset, reg_addr, in,  out, we, mapData, playerRot, frame,
   input mapData;
   input [1:0] playerRot;
   input [5:0] frame;
-  input pelletData;
+  input [1:0] pelletData;
   
   output [15:0] out;
   input [15:0] in;

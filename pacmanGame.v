@@ -2,6 +2,7 @@
 
 `include "hvsync_generator.v"
 `include "ram.v"
+`include "lfsr.v"
 `include "cpu16.v"
 `include "spriteRegs.v"
 `include "AccessManager.v"
@@ -141,6 +142,9 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   wire [4:0] cpuPelletX = regs.sprite_reg[`PELLET_X][4:0];
   wire [4:0] cpuPelletY = regs.sprite_reg[`PELLET_Y][4:0];
   wire cpuPelletClear = regs.sprite_reg[`PELLET_CLEAR][0];
+  
+  wire isPowerUp = (cpuPelletX == 2 || cpuPelletX == 27) && (cpuPelletY == 4 || cpuPelletY == 24) && cpuPelletData;
+  
   wire cpuPelletData;
   
   PelletData data(
@@ -185,7 +189,9 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .col(blinkyColor), 
     .direction(regs.sprite_reg[`BLINKY_ROT][1:0]),
     .xpos(regs.sprite_reg[`BLINKY_POS_X][4:0]), 
-    .ypos(regs.sprite_reg[`BLINKY_POS_Y][4:0])
+    .ypos(regs.sprite_reg[`BLINKY_POS_Y][4:0]),
+    .aiState(regs.sprite_reg[`BLINKY_AI][3:0]),
+    .aiTimer(regs.sprite_reg[`BLINKY_AI_TIMER][5:0])
   );
   
   wire [2:0] pinkyColor;
@@ -202,7 +208,29 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .col(pinkyColor), 
     .direction(regs.sprite_reg[`PINKY_ROT][1:0]),
     .xpos(regs.sprite_reg[`PINKY_POS_X][4:0]), 
-    .ypos(regs.sprite_reg[`PINKY_POS_Y][4:0])
+    .ypos(regs.sprite_reg[`PINKY_POS_Y][4:0]),
+    .aiState(regs.sprite_reg[`PINKY_AI][3:0]),
+    .aiTimer(regs.sprite_reg[`PINKY_AI_TIMER][5:0])
+  );
+  
+  
+  wire [2:0] inkyColor;
+  
+  Blinky
+  #(
+    .colorMap({`WHITE, `BLUE, `CYAN, `BLACK})
+  )
+  inky(
+    .clk(clk), 
+    .ce(mainCE), 
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .col(inkyColor), 
+    .direction(regs.sprite_reg[`INKY_ROT][1:0]),
+    .xpos(regs.sprite_reg[`INKY_POS_X][4:0]), 
+    .ypos(regs.sprite_reg[`INKY_POS_Y][4:0]),
+    .aiState(regs.sprite_reg[`INKY_AI][3:0]),
+    .aiTimer(regs.sprite_reg[`INKY_AI_TIMER][5:0])
   );
   
   wire [2:0] digitXofs;
@@ -339,6 +367,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .pacmanColor(pacmanColor), 
     .blinkyColor(blinkyColor),
     .pinkyColor(pinkyColor),
+    .inkyColor(inkyColor),
     .rgb(rgb)
   );
   
@@ -402,7 +431,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .mapData(mapValues_b[regs.sprite_reg[`WORLD_POS_X][4:0]]), 
     .playerRot(dir),
     .frame(timeCounter),
-    .pelletData(cpuPelletData)
+    .pelletData({isPowerUp, cpuPelletData})
   );
  
   
@@ -513,9 +542,14 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define ENEMY_SCATTER_TARGET_X $Cc
 .define ENEMY_SCATTER_TARGET_Y $CD 
       
-.define PACMAN_MOVE_SPEED 4      
+.define CURRENT_KILL_SCORE $CE       
+      
+.define PACMAN_MOVE_SPEED 4    
+.define PACMAN_ENERIZE_MOVE_SPEED 3      
+      
 .define BLINKY_MOVE_SPEED 6 
-.define PINKY_MOVE_SPEED 6    
+.define PINKY_MOVE_SPEED 6  
+.define INKY_MOVE_SPEED 6      
       
       
 Init:  
@@ -549,10 +583,15 @@ Start:
       mov	bx, #12
       mov	[BLINKY_POS_Y], bx
       
-      mov	bx, #15
+      mov	bx, #17
       mov	[PINKY_POS_X], bx
       mov	bx, #15
       mov	[PINKY_POS_Y], bx
+      
+      mov	bx, #15
+      mov	[INKY_POS_X], bx
+      mov	bx, #15
+      mov	[INKY_POS_Y], bx
       
       mov	ax, #1
       mov	[PACMAN_TIMER], ax
@@ -563,6 +602,8 @@ Start:
       mov	[BLINKY_TIMER], ax
       mov	ax, #1
       mov	[PINKY_TIMER], ax
+      mov	ax, #1
+      mov	[INKY_TIMER], ax
 
       mov	ax, #1
       mov	[DISPLAY_FLAGS], ax
@@ -575,6 +616,8 @@ Start:
 ; Start waiting
       
 StartWait:
+      
+      
       
       mov	ax, [FRAME_SYNC]
       sub	ax, #1
@@ -611,6 +654,7 @@ Loop:
       mov	fx, @PacmanThink
       jsr	fx
       
+      
 Blinky:    
       mov	ax, [BLINKY_TIMER]
       add	ax, #1
@@ -634,22 +678,18 @@ Blinky:
       mov	ax, [PACMAN_POS_Y]
       mov	[ENEMY_CHASE_TARGET_Y], ax
       
+      mov	cx, #0
       mov	ex, #BLINKY_POS_X
       mov	fx, @EnemyThink
       jsr	fx
       
 Pinky: 
-      mov	ax, [SCORE]
-      sub	ax, #30
-      bmi	EndLoop
-      
-      
       mov	ax, [PINKY_TIMER]
       add	ax, #1
       mov	[PINKY_TIMER], ax
       
       sub	ax, #PINKY_MOVE_SPEED
-      bnz	EndLoop
+      bnz	Inky
       
       mov	ax, #0
       mov	[PINKY_TIMER], ax
@@ -695,10 +735,78 @@ PinkyMove:
       mov	fx, @FindValidChasePos
       jsr	fx
       
-      
+      mov	cx, #30
       mov	ex, #PINKY_POS_X
       mov	fx, @EnemyThink
       jsr	fx
+
+Inky: 
+      mov	ax, [INKY_TIMER]
+      add	ax, #1
+      mov	[INKY_TIMER], ax
+      
+      sub	ax, #INKY_MOVE_SPEED
+      bnz	EndLoop
+      
+      mov	ax, #0
+      mov	[INKY_TIMER], ax
+      
+      mov	ax, #2
+      mov	[ENEMY_SCATTER_TARGET_X], ax
+      
+      mov	ax, #27
+      mov	[ENEMY_SCATTER_TARGET_Y], ax
+      
+      mov	ax, [PACMAN_ROT]
+      bz	InkyBugDir
+      
+      mov	dx, @GetVector
+      jsr	dx
+      
+      asl	ax
+      asl	bx
+      
+      mov	cx, [PACMAN_POS_X]
+      add	ax, cx
+      
+      mov	cx, [PACMAN_POS_Y]
+      add	bx, cx
+      
+      jmp	InkyCalcTarget
+      
+InkyBugDir:      
+      mov	ax, [PACMAN_POS_X]
+      sub	ax, #2
+      
+      mov	bx, [PACMAN_POS_Y]
+      sub	bx, #2 
+      
+InkyCalcTarget: 
+      
+      asl	ax
+      asl	bx
+      
+      mov	cx, [BLINKY_POS_X]
+      sub	ax, cx
+      
+      mov	cx, [BLINKY_POS_Y]
+      sub	bx, cx
+      
+      mov	[ENEMY_CHASE_TARGET_X], ax
+      mov	[ENEMY_CHASE_TARGET_Y], bx
+     
+      
+      mov	fx, @FindValidChasePos
+      jsr	fx
+      
+      
+      mov	cx, #60
+      mov	ex, #INKY_POS_X
+      mov	fx, @EnemyThink
+      jsr	fx
+      
+            
+      
       
 EndLoop:      
       jmp Loop
@@ -708,8 +816,45 @@ EndLoop:
 ; Character logic
       
 FindValidChasePos:
+      
+      
       mov	cx, [ENEMY_CHASE_TARGET_X]
       mov	dx, [ENEMY_CHASE_TARGET_Y]
+      
+      mov	ex, cx ; Check X on boundary
+      sub	ex, #1
+      bpl	CheckNext
+      
+      mov	cx, #2
+      jmp	StartMainCheck
+      
+CheckNext: 
+      mov	ex, cx
+      sub	ex, #28
+      bmi	CheckNext1
+      
+      mov	cx, #27
+      jmp	StartMainCheck
+ 
+CheckNext1:       
+      mov	ex, dx ; Check Y on boundary
+      sub	ex, #1
+      bpl	CheckNext2
+      
+      mov	dx, #2
+      jmp	StartMainCheck
+      
+CheckNext2:      
+      mov	ex, dx
+      sub	ex, #28
+      bmi	StartMainCheck
+      
+      
+      
+      mov	dx, #27
+      
+StartMainCheck: 
+      
       
       mov	ax, cx
       mov	bx, dx
@@ -718,6 +863,8 @@ FindValidChasePos:
       mov	fx, @$fffe
       
 CheckCurrentPos:
+      
+      
       push	ax
       push	bx
       
@@ -768,17 +915,47 @@ ItsValid:
       pop	bx
       pop	ax
       
+      
       mov	[ENEMY_CHASE_TARGET_X], ax
       mov	[ENEMY_CHASE_TARGET_Y], bx
       
       rts
       
+; cx - score goal      
 ; ex - current enemy index   
 EnemyThink:
+      
+      mov	ax, [SCORE]
+      sub	ax, cx
+      bmi	SleepMode
+      
       mov	ax, [ex+4]
       bz	Chase
       sub	ax, #1
       bz	Scatter
+      sub	ax, #2
+      bz	Frightened
+      sub	ax, #1
+      bz	Respawn
+      rts
+      
+SleepMode:
+      
+      mov	ax, [ex+4]
+      sub	ax, #3
+      bnz	CantMove
+      
+      
+      mov	bx, ex
+      add	bx, #5
+      
+      mov 	ax, [bx]
+      add	ax, #1
+      mov	[bx], ax
+      
+      sub	ax, #12
+      bz	StopScatter 
+      
       rts
 
 Scatter: 
@@ -789,7 +966,7 @@ Scatter:
       add	ax, #1
       mov	[bx], ax
       
-      sub	ax, #7
+      sub	ax, #14
       bz	StopScatter
       
       mov	ax, [ENEMY_SCATTER_TARGET_X]
@@ -799,7 +976,7 @@ Scatter:
       mov	dx, [ex+1]
       
       jmp	Movement
-      
+        
 Chase:    
       mov	bx, ex
       add	bx, #5
@@ -808,7 +985,7 @@ Chase:
       add	ax, #1
       mov	[bx], ax
       
-      sub	ax, #30
+      sub	ax, #60
       bz	StopChase     
       
       mov	ax, [ENEMY_CHASE_TARGET_X]
@@ -830,9 +1007,112 @@ Chase:
       mov	cx, [ex]
       mov	dx, [ex+1]
       
-Movement:  
+      jmp	Movement
       
+CantMove: 
+      rts      
+      
+      
+      
+Frightened:       
+      mov	bx, ex
+      add	bx, #5
+      
+      mov 	ax, [bx]
+      add	ax, #1
+      mov	[bx], ax
+      
+      sub	ax, #12
+      bz	StopFrightened 
+      
+      jmp	RandomDirection
+
+Respawn:
+      
+      mov	cx, [ex]
+      sub	cx, #15
+      bnz	GoToRespawn
+      
+      mov	dx, [ex+1]
+      sub	dx, #12
+      bnz	GoToRespawn
+      
+      
+      jmp	StopFrightened
+      
+GoToRespawn:     
+      mov	ax, #15
+      mov	bx, #12
+      
+      mov	cx, [ex]
+      mov	dx, [ex+1]
+      
+      jmp	Movement
+      
+StopFrightened:      
+      mov	ax, #PACMAN_MOVE_SPEED
+      mov	[PACMAN_WAIT], ax
+      jmp	UpdateMode
+      
+StopScatter:
+      mov	fx, @ReverseMove
+      jsr	fx	
+      
+UpdateMode:      
+      mov	bx, ex
+      add	bx, #4
+      
+      mov	ax, #0
+      mov	[bx], ax
+      inc	bx
+      mov	[bx], ax
+      rts
+      
+      
+StopChase:  
+      mov	fx, @ReverseMove
+      jsr	fx
+      
+      mov	bx, ex
+      add	bx, #4
+      
+      mov	ax, #1
+      mov	[bx], ax
+      
+      inc	bx
+      mov	ax, #0
+      mov	[bx], ax
+      rts          
+      
+ReverseMove:
+      mov	bx, ex
+      add	bx, #2
+      
+      mov	ax, [bx]
+      add	ax, #2
+      and	ax, #3
+      mov	[bx], ax
+      rts
+      
+Movement:
       push	ax
+      
+      sub	ax, cx
+      bnz	AINotZero
+      
+      mov	ax, bx
+      sub	ax, dx
+      bnz	AINotZero
+      
+      pop	ax
+      jmp	RandomDirection
+      
+AINotZero: 
+      
+      pop	ax
+      push	ax
+      
+      
       push	bx
       push	cx
       push	dx
@@ -855,9 +1135,6 @@ Movement:
       mov	bx, ex
       mov	fx, @CharLogic
       jsr	fx
-      rts
-      
-CantMove:  
       rts
       
 Reroute:
@@ -883,7 +1160,7 @@ Reroute:
       
       mov	cx, ax
       sub	cx, #4
-      bz	CantMove
+      bz	RandomDirection
       
       mov	bx, ex
       mov	fx, @CharLogic
@@ -891,30 +1168,25 @@ Reroute:
       rts
       
       rts 
+           
+RandomDirection:
+      rng	ax
+      and	ax, #3
       
-StopScatter:      
+      mov	bx, [ex+2]
+      add	bx, #2
+      and	bx, #3
+      
+      
+      mov	cx, ax
+      sub	cx, bx
+      bz	RandomDirection
+      
       mov	bx, ex
-      mov	ax, #0
-      add	bx, #4
-      
-      mov	[bx], ax
-      inc	bx
-      mov	[bx], ax
+      mov	fx, @CharLogic
+      jsr	fx
       rts
-      
-      
-StopChase:  
-      mov	bx, ex
-      add	bx, #4
-      
-      mov	ax, #1
-      mov	[bx], ax
-      
-      inc	bx
-      mov	ax, #0
-      mov	[bx], ax
-      
-      rts      
+       
       
       
 PacmanThink:
@@ -934,13 +1206,17 @@ PacmanThink:
       mov	fx, @TestCollision
       jsr	fx
       
+      mov	ax, #PINKY_POS_X
+      mov	fx, @TestCollision
+      jsr	fx
+      
       mov	ax, [PACMAN_POS_X]
       mov	bx, [PACMAN_POS_Y]
       
       mov	[PELLET_X], ax
       mov	[PELLET_Y], bx
       
-      mov	ax, [PELLET_DATA]
+      mov	bx, [PELLET_DATA]
       bnz	IncScore
       rts
       
@@ -950,11 +1226,38 @@ IncScore:
       mov	ax, #0
       mov	[PELLET_CLEAR], ax
       
+      sub	bx, #3
+      bz	Energizer
+      
       mov	ax, [SCORE]
       add	ax, #1
       mov	[SCORE], ax
+      jmp	DisplayScore
       
+Energizer:
+      mov	ax, [SCORE]
+      add	ax, #5
+      mov	[SCORE], ax
       
+      mov	ax, #3
+      mov	[BLINKY_AI], ax
+      mov	[PINKY_AI], ax
+      mov	[INKY_AI], ax
+      mov	[CLYDE_AI], ax
+      
+      mov	ax, #0
+      mov	[BLINKY_AI_TIMER], ax
+      mov	[PINKY_AI_TIMER], ax
+      mov	[INKY_AI_TIMER], ax
+      mov	[CLYDE_AI_TIMER], ax
+      
+      mov	ax, #20
+      mov	[CURRENT_KILL_SCORE], ax
+      
+      mov	ax, #PACMAN_ENERIZE_MOVE_SPEED
+      mov	[PACMAN_WAIT], ax
+      
+DisplayScore:      
       mov	ax, [SCORE]
       mov	fx, @ToDecimal
       jsr	fx
@@ -966,7 +1269,7 @@ TestCollision:
       mov	cx, ax
       
       mov	ax, [PACMAN_POS_X]
-      mov	bx, [cx]
+      mov	bx, [cx] ; X POS
       sub	ax, bx
       
       mov	dx, @Abs
@@ -976,7 +1279,7 @@ TestCollision:
       bpl	NoCollision
       
       mov	ax, [PACMAN_POS_Y]
-      mov	bx, [cx+1]
+      mov	bx, [cx+1] ; Y POS
       sub	ax, bx
       
       mov	dx, @Abs
@@ -984,6 +1287,14 @@ TestCollision:
       sub	ax, #2
       
       bpl	NoCollision
+      
+      
+      mov	ax, [cx+4] ; AI STATE
+      sub	ax, #3
+      bz	KillGhost
+      sub	ax, #1
+      bz	NoCollision
+      
       
       ; Collision
       
@@ -993,6 +1304,31 @@ TestCollision:
       
       bz	GameOver
       jmp	Start
+      
+KillGhost:  
+      
+      mov	bx, cx
+      add	bx, #4
+      
+      mov	ax, #4
+      mov	[bx], ax ; AI STATE
+      
+      mov	ax, #0
+      inc	bx
+      mov	[bx], ax ; AI TIMER
+      
+      mov	bx, [CURRENT_KILL_SCORE]
+      
+      mov	ax, [SCORE]
+      add	ax, bx
+      mov	[SCORE], ax
+      
+      asl	bx
+      mov	[CURRENT_KILL_SCORE], bx
+      
+      mov	fx, @ToDecimal
+      jsr	fx
+      
       
 NoCollision:
       rts

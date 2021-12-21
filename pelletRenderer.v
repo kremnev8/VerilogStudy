@@ -8,6 +8,8 @@ module pelletRenderer(shpos, svpos, xout, yout, din, color);
   output [4:0] xout = shpos[8:4] + 1;
   output [4:0] yout = svpos[8:4] + 1;
   
+  wire isPowerUp = (xout == 2 || xout == 27) && (yout == 4 || yout == 24);
+  
   output reg [2:0] color;
   
   wire [2:0] yofs = svpos[3:1]; // scanline of cell	   
@@ -19,7 +21,7 @@ module pelletRenderer(shpos, svpos, xout, yout, din, color);
   
   // digits ROM
   pelletBitmap bitmap(
-    .sprite({1'b0, din}), 
+    .sprite({isPowerUp, din}), 
     .yin(yofs), 
     .xin(xofs), 
     .out(colData)

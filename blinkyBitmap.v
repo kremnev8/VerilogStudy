@@ -1,7 +1,10 @@
 
-module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
+module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos, aiState, aiTimer);
   
   parameter [11:0] colorMap = {`WHITE, `BLUE, `RED, `BLACK};
+  parameter [11:0] frightenedColors = {`WHITE, `BLACK, `BLUE, `BLACK};
+  parameter [11:0] frightened1Colors = {`RED, `BLACK, `WHITE, `BLACK};
+  parameter [11:0] deadColors = {`WHITE, `BLUE, `BLACK, `BLACK};
   
   parameter WAIT_FRAME_TIME = 20 / (60 / `FRAME_RATE);
   
@@ -16,6 +19,8 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   input [4:0] xpos;
   input [4:0] ypos;
   input [1:0] direction;
+  input [3:0] aiState;
+  input [5:0] aiTimer;
   
   output reg [2:0] col;
   
@@ -28,6 +33,7 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   wire [3:0] xsprpos;
   
   wire [1:0] colIn;
+  wire [1:0] infearColIn;
   
   reg [5:0] counter = 0;
   
@@ -50,9 +56,25 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos);
     .out(colIn)
   );
   
+  FrightenedBitmap infear(
+    .animState(animState), 
+    .yin(ysprpos), 
+    .xin(xsprpos), 
+    .out(infearColIn)
+  );
+  
   always @(posedge clk) begin
-    
-    col <= colorMap[colIn*3+:3];
+    if (aiState != 3)
+      if (aiState == 4)
+        col <= deadColors[colIn*3+:3];
+      else
+    	col <= colorMap[colIn*3+:3];
+    else begin
+      if (aiTimer <= 8 || animState)
+        col <= frightenedColors[infearColIn*3+:3];
+      else
+        col <= frightened1Colors[infearColIn*3+:3];
+    end
     
     if (ce) begin
       counter <= counter + 1'b1;
@@ -77,9 +99,9 @@ module BlinkyBitmap(animState, direction, yin, xin, out);
   input [3:0] xin;
   output [1:0] out;
   
-  reg [31:0] pacman[0:128];
+  reg [31:0] pacman[0:127];
   
-  wire [7:0] caseexpr = {1'b0, direction, animState, yin};
+  wire [6:0] caseexpr = {direction, animState, yin};
   
   assign out = pacman[caseexpr][xin*2+:2];
   
@@ -220,6 +242,59 @@ module BlinkyBitmap(animState, direction, yin, xin, out);
     pacman['h7D] = 32'b10101010001010101000101010100;
     pacman['h7E] = 32'b101000000010100000001010000;
     pacman['h7F] = 32'b0;
+    
+  end
+  
+endmodule
+
+module FrightenedBitmap(animState, yin, xin, out);
+  
+  input animState; 
+  input [3:0] yin;
+  input [3:0] xin;
+  output [1:0] out;
+  
+  reg [31:0] pacman[0:31];
+  
+  wire [4:0] caseexpr = {animState, yin};
+  
+  assign out = pacman[caseexpr][xin*2+:2];
+  
+  initial begin
+    /*{w:16,h:16,bpp:2, bpw:32,count:2}*/
+    pacman['h00] = 32'b0;
+    pacman['h01] = 32'b1010101000000000000;
+    pacman['h02] = 32'b10101010101010100000000;
+    pacman['h03] = 32'b1010101010101010101000000;
+    pacman['h04] = 32'b101010101010101010101010000;
+    pacman['h05] = 32'b101010101010101010101010000;
+    pacman['h06] = 32'b101011111010111110101010000;
+    pacman['h07] = 32'b10101011111010111110101010100;
+    pacman['h08] = 32'b10101010101010101010101010100;
+    pacman['h09] = 32'b10101010101010101010101010100;
+    pacman['h0A] = 32'b10111110101111101011111010100;
+    pacman['h0B] = 32'b11101011111010111110101110100;
+    pacman['h0C] = 32'b10101010101010101010101010100;
+    pacman['h0D] = 32'b10100010101000001010100010100;
+    pacman['h0E] = 32'b10000000101000001010000000100;
+    pacman['h0F] = 32'b0;
+    
+    pacman['h10] = 32'b0;
+    pacman['h11] = 32'b1010101000000000000;
+    pacman['h12] = 32'b10101010101010100000000;
+    pacman['h13] = 32'b1010101010101010101000000;
+    pacman['h14] = 32'b101010101010101010101010000;
+    pacman['h15] = 32'b101010101010101010101010000;
+    pacman['h16] = 32'b101011111010111110101010000;
+    pacman['h17] = 32'b10101011111010111110101010100;
+    pacman['h18] = 32'b10101010101010101010101010100;
+    pacman['h19] = 32'b10101010101010101010101010100;
+    pacman['h1A] = 32'b10111110101111101011111010100;
+    pacman['h1B] = 32'b11101011111010111110101110100;
+    pacman['h1C] = 32'b10101010101010101010101010100;
+    pacman['h1D] = 32'b10101010001010101000101010100;
+    pacman['h1E] = 32'b101000000010100000001010000;
+    pacman['h1F] = 32'b0;
     
   end
   

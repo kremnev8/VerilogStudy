@@ -21,14 +21,14 @@ module pelletBitmap(sprite, yin, xin, out);
       5'o16: bits = 8'b0;
       5'o17: bits = 8'b0;
      
-      5'o20: bits = 8'b0;
-      5'o21: bits = 8'b11000;
-      5'o22: bits = 8'b111100;
-      5'o23: bits = 8'b1111110;
-      5'o24: bits = 8'b1111110;
-      5'o25: bits = 8'b111100;
-      5'o26: bits = 8'b11000;
-      5'o27: bits = 8'b0;
+      5'o30: bits = 8'b0;
+      5'o31: bits = 8'b11000;
+      5'o32: bits = 8'b111100;
+      5'o33: bits = 8'b1111110;
+      5'o34: bits = 8'b1111110;
+      5'o35: bits = 8'b111100;
+      5'o36: bits = 8'b11000;
+      5'o37: bits = 8'b0;
 
       default: bits = 0;
     endcase

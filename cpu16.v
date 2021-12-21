@@ -123,6 +123,18 @@ module CPU16(clk, reset, busy,
     .Y(Y),
     .aluop(aluop),
     .carry(carry));
+  
+  reg rngEnable = 0;
+  wire [7:0] rngValue;
+  
+  reg enableSteps = 0;
+  
+  LFSR rng(
+    .clk(clk), 
+    .reset(reset), 
+    .enable(rngEnable), 
+    .lfsr(rngValue)
+  );
 
   always @(posedge clk)
     if (reset) begin
@@ -139,6 +151,7 @@ module CPU16(clk, reset, busy,
         end
 	// state 1: select opcode address
         S_SELECT: begin
+          rngEnable <= 0;
           write <= 0;
           if (hold) begin
             if (keycode == 8'ha0) begin
@@ -192,6 +205,8 @@ module CPU16(clk, reset, busy,
               data_out <= regs[data_in[10:8]];
               write <= 1;
               state <= S_SELECT;
+              if (enableSteps)
+              	hold <= 1;
             end
             //  01001aaa#####bbb	[B+#] -> A
             16'b01001???????????: begin
@@ -229,12 +244,27 @@ module CPU16(clk, reset, busy,
             16'b10010???????????: begin
               carry <= data_in[0];
               state <= S_SELECT;
+              if (enableSteps)
+              	hold <= 1;
             end
             
-            //  10011??????????c	set/clear carry
+            //  10011???????????	halt
             16'b10011???????????: begin
               hold <= 1;
+              enableSteps <= data_in[0];
               state <= S_SELECT;
+            end
+            
+            //  10100aaa????????	rng
+            16'b10100???????????: begin
+              
+              regs[data_in[2:0]] <= 16'(rngValue);
+              zero <= ~|rngValue;
+              rngEnable <= 1;
+              
+              state <= S_SELECT;
+              if (enableSteps)
+              	hold <= 1;
             end
             
             //  1000????########	conditional branch
@@ -248,6 +278,8 @@ module CPU16(clk, reset, busy,
                 regs[IP] <= regs[IP] + 16'($signed(data_in[7:0]));
               end
               state <= S_SELECT;
+              if (enableSteps)
+              	hold <= 1;
             end
             // fall-through RESET
             default: begin
@@ -272,6 +304,8 @@ module CPU16(clk, reset, busy,
           neg <= Y[15];
           // repeat CPU loop
           state <= S_SELECT;
+          if (enableSteps)
+              	hold <= 1;
         end
         // wait 1 cycle for RAM read
         S_DECODE_WAIT: begin
