@@ -6,7 +6,7 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos, aiState, aiTime
   parameter [11:0] frightened1Colors = {`RED, `BLACK, `WHITE, `BLACK};
   parameter [11:0] deadColors = {`WHITE, `BLUE, `BLACK, `BLACK};
   
-  parameter WAIT_FRAME_TIME = 20 / (60 / `FRAME_RATE);
+  parameter WAIT_FRAME_TIME = 40 / (60 / `FRAME_RATE);
   
   //back, primary, eyes, eyes outer
   

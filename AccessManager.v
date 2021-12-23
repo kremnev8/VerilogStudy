@@ -9,10 +9,16 @@ module AccessManager(clk, shpos, svpos, mainCE);
   
   
   always @(posedge clk) begin
-    if (shpos == 0 && svpos == 0) begin
+    if (shpos == 300 && svpos == 0) begin
       mainCE <= 1;
     end
-    else if (shpos == 0 && svpos == 262) begin
+    else if (shpos == 300 && svpos == 131) begin
+      mainCE <= 1;
+    end
+    else if (shpos == 300 && svpos == 262) begin
+      mainCE <= 1;
+    end
+    else if (shpos == 300 && svpos == 393) begin
       mainCE <= 1;
     end
     else

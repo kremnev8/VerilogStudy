@@ -26,38 +26,42 @@
 `define BLINKY_ROT   10
 `define BLINKY_TIMER 11
 `define BLINKY_AI  12 
-`define BLINKY_AI_TIMER  13 
+`define BLINKY_AI_TIMER  13
+`define BLINKY_WAIT  14 
 
-`define PINKY_POS_X 14
-`define PINKY_POS_Y 15
-`define PINKY_ROT   16
-`define PINKY_TIMER 17
-`define PINKY_AI  18
-`define PINKY_AI_TIMER  19 
+`define PINKY_POS_X 15
+`define PINKY_POS_Y 16
+`define PINKY_ROT   17
+`define PINKY_TIMER 18
+`define PINKY_AI  19
+`define PINKY_AI_TIMER  20
+`define PINKY_WAIT  21
 
-`define INKY_POS_X 20
-`define INKY_POS_Y 21
-`define INKY_ROT   22
-`define INKY_TIMER 23
-`define INKY_AI  24
-`define INKY_AI_TIMER  25 
+`define INKY_POS_X 22
+`define INKY_POS_Y 23
+`define INKY_ROT   24
+`define INKY_TIMER 25
+`define INKY_AI  26
+`define INKY_AI_TIMER  27 
+`define INKY_WAIT  28
 
-`define CLYDE_POS_X 26
-`define CLYDE_POS_Y 27
-`define CLYDE_ROT   28
-`define CLYDE_TIMER 29
-`define CLYDE_AI  30
-`define CLYDE_AI_TIMER  31 
+`define CLYDE_POS_X 29
+`define CLYDE_POS_Y 30
+`define CLYDE_ROT   31
+`define CLYDE_TIMER 32
+`define CLYDE_AI  33
+`define CLYDE_AI_TIMER  34 
+`define CLYDE_WAIT  35
 
    
-`define FRAME_SYNC   32      
-`define PELLET_X 33
-`define PELLET_Y 34   
-`define PELLET_CLEAR 35
-`define DISPLAY_FLAGS 36
+`define FRAME_SYNC   36      
+`define PELLET_X 37
+`define PELLET_Y 38   
+`define PELLET_CLEAR 39
+`define DISPLAY_FLAGS 40
 
-`define SCORE 37
-`define SCORE_DISP 38
+`define SCORE 41
+`define SCORE_DISP 42
   
 `define MAP_DATA 48
 `define PLAYER_ROT 49

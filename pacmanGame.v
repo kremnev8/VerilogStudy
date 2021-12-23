@@ -240,7 +240,10 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   
   CharacterRenderer
   #(
-    .X_OFFSET(70)
+    .X_POS(455),
+    .Y_POS(50),
+    .X_SCALE(4),
+    .Y_SCALE(8)
   )
   digits(
     .digitData({regs.scoreDisp, 4'b0}), 
@@ -416,7 +419,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   
   
   reg [15:0] ram[0:16319];
-  reg [15:0] rom[0:1023];
+  reg [15:0] rom[0:2047];
   
   wire [15:0] regs_out;
   output reg keystrobe;
@@ -464,7 +467,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
         to_cpu <= ram[address_bus[13:0] - 14'd64];   //0x0000
     
     else if (address_bus[15:14] == 2'b01) 
-      to_cpu <= rom[address_bus[9:0]];    //0x4000
+      to_cpu <= rom[address_bus[10:0]];    //0x4000
     //else if (address_bus[15:14] == 2'b10)
     //to_cpu <= {8'b0, regs_out}; //0x8000
   end
@@ -478,7 +481,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
       __asm
 .arch cpu16arch
 .org 0x4000
-.len 1024
+.len 2048
 
 .define PACMAN_POS_X 0
 .define PACMAN_POS_Y 1
@@ -486,54 +489,56 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define PACMAN_TIMER 3 
 .define PACMAN_WAIT  4 
 .define PACMAN_LIFES 5
- 
+
 .define WORLD_POS_X  6
 .define WORLD_POS_Y  7
-
+      
 .define BLINKY_POS_X 8
 .define BLINKY_POS_Y 9
 .define BLINKY_ROT   10
 .define BLINKY_TIMER 11
 .define BLINKY_AI  12 
-.define BLINKY_AI_TIMER  13 
+.define BLINKY_AI_TIMER  13
+.define BLINKY_WAIT  14
+      
+.define PINKY_POS_X 15
+.define PINKY_POS_Y 16
+.define PINKY_ROT   17
+.define PINKY_TIMER 18
+.define PINKY_AI  19
+.define PINKY_AI_TIMER  20
+.define PINKY_WAIT  21
+      
+.define INKY_POS_X 22
+.define INKY_POS_Y 23
+.define INKY_ROT   24
+.define INKY_TIMER 25
+.define INKY_AI  26
+.define INKY_AI_TIMER  27 
+.define INKY_WAIT  28
+      
+.define CLYDE_POS_X 29
+.define CLYDE_POS_Y 30
+.define CLYDE_ROT   31
+.define CLYDE_TIMER 32
+.define CLYDE_AI  33
+.define CLYDE_AI_TIMER  34 
+.define CLYDE_WAIT  35
 
-.define PINKY_POS_X 14
-.define PINKY_POS_Y 15
-.define PINKY_ROT   16
-.define PINKY_TIMER 17
-.define PINKY_AI  18
-.define PINKY_AI_TIMER  19 
-
-.define INKY_POS_X 20
-.define INKY_POS_Y 21
-.define INKY_ROT   22
-.define INKY_TIMER 23
-.define INKY_AI  24
-.define INKY_AI_TIMER  25 
-
-.define CLYDE_POS_X 26
-.define CLYDE_POS_Y 27
-.define CLYDE_ROT   28
-.define CLYDE_TIMER 29
-.define CLYDE_AI  30
-.define CLYDE_AI_TIMER  31 
-
-  
-.define FRAME_SYNC   32      
-.define PELLET_X 33
-.define PELLET_Y 34   
-.define PELLET_CLEAR 35
-.define DISPLAY_FLAGS 36
-
-.define SCORE 37
-.define SCORE_DISP 38
+.define FRAME_SYNC   36      
+.define PELLET_X 37
+.define PELLET_Y 38   
+.define PELLET_CLEAR 39
+.define DISPLAY_FLAGS 40
+.define SCORE 41
+.define SCORE_DISP 42
 
 .define MAP_DATA 48
 .define PLAYER_ROT 49
 .define FRAME_COUNT 50
-.define PELLET_DATA 51 
+.define PELLET_DATA 51
       
-.define CURRENT_ENEMY $C8   
+.define CURRENT_CHARACTER $C8   
 .define START_TIMER $C9     
       
 .define ENEMY_CHASE_TARGET_X $CA
@@ -542,22 +547,43 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define ENEMY_SCATTER_TARGET_X $Cc
 .define ENEMY_SCATTER_TARGET_Y $CD 
       
-.define CURRENT_KILL_SCORE $CE       
+.define CURRENT_KILL_SCORE $CE 
+.define RAW_PELLETS_EATEN $CF 
       
-.define PACMAN_MOVE_SPEED 4    
-.define PACMAN_ENERIZE_MOVE_SPEED 3      
+.define CHARACTER_ARRAY $D0      
       
-.define BLINKY_MOVE_SPEED 6 
-.define PINKY_MOVE_SPEED 6  
-.define INKY_MOVE_SPEED 6      
+      
+.define PACMAN_MOVE_SPEED 8  
+.define PACMAN_ENERIZE_MOVE_SPEED 5      
+      
+.define BLINKY_MOVE_SPEED 12 
+.define PINKY_MOVE_SPEED 12  
+.define INKY_MOVE_SPEED 12      
       
       
 Init:  
       mov	sp, @$2fff
       mov	ax, #0
       mov	[SCORE], ax
+      mov	[RAW_PELLETS_EATEN], ax
       
-      mov	ax, #4
+      mov	ax, #BLINKY_POS_X
+      mov	bx, #CHARACTER_ARRAY
+      mov	[bx], ax
+      
+      mov	ax, #PINKY_POS_X
+      inc	bx
+      mov	[bx], ax
+      
+      mov	ax, #INKY_POS_X
+      inc	bx
+      mov	[bx], ax
+      
+      mov	ax, #CLYDE_POS_X
+      inc	bx
+      mov	[bx], ax
+      
+      mov	ax, #PACMAN_MOVE_SPEED
       mov	[PACMAN_WAIT], ax
       mov	ax, #3
       mov	[PACMAN_LIFES], ax
@@ -570,7 +596,7 @@ Init:
       
 Start:
       mov	sp, @$2fff
-      mov	ax, @30
+      mov	ax, @1
       mov	[START_TIMER], ax
       
       mov	bx, #15
@@ -583,12 +609,12 @@ Start:
       mov	bx, #12
       mov	[BLINKY_POS_Y], bx
       
-      mov	bx, #17
+      mov	bx, #14
       mov	[PINKY_POS_X], bx
       mov	bx, #15
       mov	[PINKY_POS_Y], bx
       
-      mov	bx, #15
+      mov	bx, #16
       mov	[INKY_POS_X], bx
       mov	bx, #15
       mov	[INKY_POS_Y], bx
@@ -735,7 +761,7 @@ PinkyMove:
       mov	fx, @FindValidChasePos
       jsr	fx
       
-      mov	cx, #30
+      mov	cx, #0
       mov	ex, #PINKY_POS_X
       mov	fx, @EnemyThink
       jsr	fx
@@ -800,7 +826,7 @@ InkyCalcTarget:
       jsr	fx
       
       
-      mov	cx, #60
+      mov	cx, #30
       mov	ex, #INKY_POS_X
       mov	fx, @EnemyThink
       jsr	fx
@@ -925,7 +951,7 @@ ItsValid:
 ; ex - current enemy index   
 EnemyThink:
       
-      mov	ax, [SCORE]
+      mov	ax, [RAW_PELLETS_EATEN]
       sub	ax, cx
       bmi	SleepMode
       
@@ -1140,7 +1166,7 @@ AINotZero:
 Reroute:
       
       mov	ax, ex
-      mov	[CURRENT_ENEMY], ax
+      mov	[CURRENT_CHARACTER], ax
       
       mov	ax, [ex]
       mov	bx, [ex+1]
@@ -1232,6 +1258,11 @@ IncScore:
       mov	ax, [SCORE]
       add	ax, #1
       mov	[SCORE], ax
+      
+      mov	ax, [RAW_PELLETS_EATEN]
+      add	ax, #1
+      mov	[RAW_PELLETS_EATEN], ax
+      
       jmp	DisplayScore
       
 Energizer:
@@ -1623,7 +1654,7 @@ AddRet:
       rts  
       
 GetBack:
-      mov	ex, [CURRENT_ENEMY]
+      mov	ex, [CURRENT_CHARACTER]
 
       mov	ax, [ex+2]
       add	ax, #2
@@ -1693,8 +1724,8 @@ DecodePos: ; Decode position value to a vector
       
 ; Map
       
-.define MAP_START 208
-.define MAP_END 1232
+.define MAP_START 224
+.define MAP_END 1248
 .define VISITED_FLAG 4096
       
 MapClear: ; Clear all values in the map area
@@ -1876,8 +1907,11 @@ TestRightPortal:
       
 NotPortal:
       rts      
-      
-IsValid: ; Check if character can enter this position
+
+; ax, bx - position      
+IsValid: ; Check _if character can enter this position
+      push	fx
+  
       mov	ex, ax ; Check X on boundary
       bz	NotValid
       sub	ex, #28
@@ -1892,10 +1926,44 @@ IsValid: ; Check if character can enter this position
       mov	[WORLD_POS_Y], bx ; is valid
       mov	ex, [MAP_DATA]
       bnz	NotValid
+      
+      mov	fx, #CHARACTER_ARRAY
+
+RepeatCharCheck:      
+      mov	ex, fx
+      sub	ex, [CURRENT_CHARACTER]
+      bz	RetIsValid
+      
+      mov	ex, [fx]
+      mov	ex, [ex+4] ; AI STATE
+      sub	ex, #4
+      bz	RetIsValid
+      
+      mov	ex, [fx]
+      mov	ex, [ex]
+      sub	ex, ax
+      bnz	RetIsValid
+      
+      mov	ex, [fx]
+      mov	ex, [ex+1]
+      sub	ex, bx
+      bnz	RetIsValid
+      
+      jmp	NotValid
+      
+RetIsValid: 
+      inc	fx
+      mov	ex, fx
+      sub	ex, #CHARACTER_ARRAY
+      sub	ex, #4
+      bnz	RepeatCharCheck
+      
       mov	ax, #1
+      pop	fx
       rts
 NotValid:
       mov	ax, #0
+      pop	fx
       rts
 
 GetRotFromVector:

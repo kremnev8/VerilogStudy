@@ -8,7 +8,7 @@ module Pacman(clk, ce, shpos, svpos, col, direction, xpos, ypos);
   
   parameter PRIMARY_COLOR = 1;
   
-  parameter WAIT_FRAME_TIME = 18 / (60 / `FRAME_RATE);
+  parameter WAIT_FRAME_TIME = 36 / (60 / `FRAME_RATE);
   
   input clk;
   input ce;
