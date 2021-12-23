@@ -550,7 +550,9 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define CURRENT_KILL_SCORE $CE 
 .define RAW_PELLETS_EATEN $CF 
       
-.define CHARACTER_ARRAY $D0      
+.define CHARACTER_ARRAY $D0     
+.define ALG_MIN_DIST $D8       
+.define ALG_MIN_ROT $D9  
       
       
 .define PACMAN_MOVE_SPEED 8  
@@ -593,6 +595,7 @@ Init:
       
       mov	fx, @MapClear
       jsr	fx
+      
       
 Start:
       mov	sp, @$2fff
@@ -687,7 +690,7 @@ Blinky:
       mov	[BLINKY_TIMER], ax
       
       sub	ax, #BLINKY_MOVE_SPEED
-      bnz	Pinky
+      bnz	EndLoop
       
       mov	ax, #0
       mov	[BLINKY_TIMER], ax
@@ -708,6 +711,8 @@ Blinky:
       mov	ex, #BLINKY_POS_X
       mov	fx, @EnemyThink
       jsr	fx
+      
+      jmp	EndLoop
       
 Pinky: 
       mov	ax, [PINKY_TIMER]
@@ -951,6 +956,8 @@ ItsValid:
 ; ex - current enemy index   
 EnemyThink:
       
+      jmp	Chase
+      
       mov	ax, [RAW_PELLETS_EATEN]
       sub	ax, cx
       bmi	SleepMode
@@ -1171,8 +1178,8 @@ Reroute:
       mov	ax, [ex]
       mov	bx, [ex+1]
       
-      mov	fx, @FindBFS
-      jsr	fx
+      ;mov	fx, @FindBFS
+      ;jsr	fx
       
       pop	ex
       pop	dx
@@ -1456,8 +1463,107 @@ ASLNZero:
 ; Pathfinding      
       
 ; ax, bx - target pos
-; cx, dx - current pos     
+; ex - current character
+      
 GetPath:
+      
+      mov	cx, ax
+      mov	dx, bx
+      
+      mov	ax, @10000
+      mov	[ALG_MIN_DIST], ax
+      
+      mov	ax, #0
+      mov	[ALG_MIN_ROT], ax
+      
+      mov	ax, #0
+ 
+DistCheckLoop:      
+      push	ax
+      
+      mov	bx, [ex+2]
+      add	bx, #2
+      and	bx, #3
+      
+      sub	bx, ax
+      bz	IgnoreDirection1
+      
+      mov	fx, @GetVector
+      jsr	fx
+      
+      add	ax, [ex]
+      inc	ex
+      add	bx, [ex]
+      dec	ex
+      
+      push	ax
+      
+      mov	fx, @IsValid
+      jsr	fx
+      
+      mov	fx, ax
+      pop	ax
+      add	fx, #0
+      bz	IgnoreDirection1
+      
+      sub	ax, cx
+      sub	bx, dx
+      
+      
+      push	cx
+      push	bx
+      
+      
+      mov	fx, @Square
+      jsr	fx
+      
+      
+      mov	cx, ax
+      
+      pop	ax
+      
+      mov	fx, @Square
+      jsr	fx
+      
+      add	cx, ax
+      mov	ax, cx
+      
+      
+      mov	bx, [ALG_MIN_DIST]
+      sub	ax, bx
+      bpl	IgnoreDirection
+      
+      
+     ; halt
+      mov	[ALG_MIN_DIST], cx
+      
+      pop	cx
+      pop	ax
+      ;halt
+      mov	[ALG_MIN_ROT], ax
+      
+      
+
+      jmp	NextDirection
+      
+IgnoreDirection: 
+      pop	cx
+IgnoreDirection1:       
+      pop	ax
+
+NextDirection:
+      inc	ax
+      mov	bx, ax
+      sub	bx, #4
+      bnz	DistCheckLoop
+      
+      
+      mov	ax, [ALG_MIN_ROT]
+      rts
+      
+      
+      
+      
       mov	fx, @EncodePos
       jsr	fx
       push	ax
@@ -1820,7 +1926,42 @@ IsEmpty: ; Check if queue has any values stored
 RetZero:
       mov	ax, #1
       rts
+  
+  
+; multiply
+
+; ax - number    
+Square:
+      push	cx
       
+      mov	fx, @Abs
+      jsr	fx
+      
+      mov	bx, ax
+      
+      asl	bx
+      asl	bx
+      asl	bx
+      asl	bx
+      
+      asl	bx
+      asl	bx
+      asl	bx
+      asl	bx
+      
+      mov	cx, #8
+      lsr	ax
+      
+MulLoop:
+      bcc	DontAddSecond
+      add	ax, bx
+     
+DontAddSecond:      
+      ror	ax
+      dec	cx
+      bnz	MulLoop
+      pop	cx
+      rts
       
 CharLogic: ; Movement logic for characters
       push	ax
@@ -1911,6 +2052,7 @@ NotPortal:
 ; ax, bx - position      
 IsValid: ; Check _if character can enter this position
       push	fx
+      push	ex
   
       mov	ex, ax ; Check X on boundary
       bz	NotValid
@@ -1959,10 +2101,12 @@ RetIsValid:
       bnz	RepeatCharCheck
       
       mov	ax, #1
+      pop	ex
       pop	fx
       rts
 NotValid:
       mov	ax, #0
+      pop	ex
       pop	fx
       rts
 

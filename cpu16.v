@@ -140,6 +140,7 @@ module CPU16(clk, reset, busy,
     if (reset) begin
       state <= S_RESET;
       busy <= 1;
+      hold <= 0;
     end else begin
       case (state)
         // state 0: reset
