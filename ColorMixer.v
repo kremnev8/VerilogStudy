@@ -2,7 +2,7 @@
 module ColorMixer (gridColor, pelletColor, 
                    text1Color, lifeColor, numbersColor, 
                    pacmanColor, 
-                   blinkyColor, pinkyColor, inkyColor,
+                   blinkyColor, pinkyColor, inkyColor, clydeColor,
                    rgb);
   
   input [2:0] gridColor;
@@ -16,6 +16,7 @@ module ColorMixer (gridColor, pelletColor,
   input [2:0] blinkyColor;
   input [2:0] pinkyColor;
   input [2:0] inkyColor;
+  input [2:0] clydeColor;
   
   output [3:0] rgb;
   
@@ -39,6 +40,8 @@ module ColorMixer (gridColor, pelletColor,
       totalColor = pinkyColor; 
     else if (inkyColor != 0)
       totalColor = inkyColor; 
+    else if (clydeColor != 0)
+      totalColor = clydeColor; 
     
     else if (pelletColor != 0)
       totalColor = pelletColor;
@@ -69,7 +72,7 @@ module ColorIndex(index, color);
       3'd4: color = 4'b0100; //blue
       3'd5: color = 4'b1101; //pink
       3'd6: color = 4'b0110; //cyan
-      3'd7: color = 4'b1011; //orange
+      3'd7: color = 4'b1010; //orange
 
       default: color = 0;
     endcase

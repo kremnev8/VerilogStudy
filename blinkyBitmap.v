@@ -64,8 +64,8 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos, aiState, aiTime
   );
   
   always @(posedge clk) begin
-    if (aiState != 3)
-      if (aiState == 4)
+    if (aiState[2:0] != `AI_FRIGHTENED)
+      if (aiState == `AI_DEAD)
         col <= deadColors[colIn*3+:3];
       else
     	col <= colorMap[colIn*3+:3];

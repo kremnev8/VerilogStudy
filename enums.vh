@@ -69,6 +69,15 @@
 `define PELLET_DATA 51
 
 
+`define AI_CHASE 0
+`define AI_SCATTER 1
+`define AI_FRIGHTENED 2
+`define AI_DEAD 3
+`define AI_EXIT_HOME 4
+
+`define AI_AT_HOME 8
+
+
 
 `define A 5'd0
 `define B 5'd1

@@ -90,7 +90,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
   assign ram_addr = init ? {row,col} : {evalXpos, evalYpos};	// 10-bit RAM address
 
   // digits ROM
-  tileMap numbers(
+  tileMap backTileMap(
     .tileType(ram_read[1:0]), 
     .rotation(ram_read[3:2]), 
     .yin(rom_yofs), 
@@ -233,6 +233,26 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .aiTimer(regs.sprite_reg[`INKY_AI_TIMER][5:0])
   );
   
+  
+  wire [2:0] clydeColor;
+  
+  Blinky
+  #(
+    .colorMap({`WHITE, `BLUE, `ORANGE, `BLACK})
+  )
+  clyde(
+    .clk(clk), 
+    .ce(mainCE), 
+    .shpos(hpos), 
+    .svpos(vpos), 
+    .col(clydeColor), 
+    .direction(regs.sprite_reg[`CLYDE_ROT][1:0]),
+    .xpos(regs.sprite_reg[`CLYDE_POS_X][4:0]), 
+    .ypos(regs.sprite_reg[`CLYDE_POS_Y][4:0]),
+    .aiState(regs.sprite_reg[`CLYDE_AI][3:0]),
+    .aiTimer(regs.sprite_reg[`CLYDE_AI_TIMER][5:0])
+  );
+  
   wire [2:0] digitXofs;
   wire [2:0] digitYofs;
   wire [3:0] digitData;
@@ -243,10 +263,11 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .X_POS(455),
     .Y_POS(50),
     .X_SCALE(4),
-    .Y_SCALE(8)
+    .Y_SCALE(8),
+    .X_OFFSET(70)
   )
-  digits(
-    .digitData({regs.scoreDisp, 4'b0}), 
+  ScoreDisp(
+    .digitData({regs.scoreDisp, 4'd0}), 
     .shpos(hpos), 
     .svpos(vpos), 
     .digit(digitData),
@@ -371,6 +392,8 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .blinkyColor(blinkyColor),
     .pinkyColor(pinkyColor),
     .inkyColor(inkyColor),
+    .clydeColor(clydeColor),
+    
     .rgb(rgb)
   );
   
@@ -555,12 +578,22 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define ALG_MIN_ROT $D9  
       
       
-.define PACMAN_MOVE_SPEED 8  
+.define PACMAN_MOVE_SPEED 8
 .define PACMAN_ENERIZE_MOVE_SPEED 5      
       
-.define BLINKY_MOVE_SPEED 12 
-.define PINKY_MOVE_SPEED 12  
-.define INKY_MOVE_SPEED 12      
+.define ENEMY_MOVE_SPEED 12 
+.define ENEMY_FAST_SPEED 9     
+.define ENEMY_CRUISE_SPEED 7       
+.define ENEMY_DEAD_MOVE_SPEED 3      
+      
+.define AI_CHASE 0
+.define AI_SCATTER 1
+.define AI_FRIGHTENED 2
+.define AI_DEAD 3
+.define AI_EXIT_HOME 4 
+      
+.define AI_AT_HOME 8      
+      
       
       
 Init:  
@@ -590,12 +623,6 @@ Init:
       mov	ax, #3
       mov	[PACMAN_LIFES], ax
       
-      mov	fx, @InitQueue
-      jsr	fx
-      
-      mov	fx, @MapClear
-      jsr	fx
-      
       
 Start:
       mov	sp, @$2fff
@@ -617,30 +644,48 @@ Start:
       mov	bx, #15
       mov	[PINKY_POS_Y], bx
       
+      mov	bx, #2
+      mov	[PINKY_ROT], bx
+      
       mov	bx, #16
       mov	[INKY_POS_X], bx
       mov	bx, #15
       mov	[INKY_POS_Y], bx
       
-      mov	ax, #1
-      mov	[PACMAN_TIMER], ax
-      mov	[BLINKY_AI], ax
-      mov	[PINKY_AI], ax
+      mov	bx, #12
+      mov	[CLYDE_POS_X], bx
+      mov	bx, #15
+      mov	[CLYDE_POS_Y], bx
       
       mov	ax, #1
+      mov	[PACMAN_TIMER], ax
       mov	[BLINKY_TIMER], ax
-      mov	ax, #1
       mov	[PINKY_TIMER], ax
-      mov	ax, #1
       mov	[INKY_TIMER], ax
-
+      
+      mov	ax, #ENEMY_MOVE_SPEED
+      mov	[BLINKY_WAIT], ax
+      mov	[PINKY_WAIT], ax
+      mov	[INKY_WAIT], ax
+      mov	[CLYDE_WAIT], ax
+      
+      
+      mov	ax, #AI_SCATTER
+      mov	[BLINKY_AI], ax
+      
+      mov	ax, #AI_AT_HOME
+      mov	[PINKY_AI], ax
+      mov	[INKY_AI], ax
+      mov	[CLYDE_AI], ax
+      
       mov	ax, #1
       mov	[DISPLAY_FLAGS], ax
       
       mov	ax, #0
       mov	[BLINKY_AI_TIMER], ax
       mov	[PINKY_AI_TIMER], ax
-      
+      mov	[INKY_AI_TIMER], ax
+      mov	[CLYDE_AI_TIMER], ax
       
 ; Start waiting
       
@@ -689,8 +734,22 @@ Blinky:
       add	ax, #1
       mov	[BLINKY_TIMER], ax
       
-      sub	ax, #BLINKY_MOVE_SPEED
-      bnz	EndLoop
+      mov	cx, ax
+      
+      mov	ax, [BLINKY_POS_X]
+      mov	bx, [BLINKY_POS_Y]
+      
+      jsr	IsTunnel
+      bz	BlinkyNormal
+      
+      lsr	cx
+      
+BlinkyNormal:  
+      mov	ax, cx
+      
+      mov	bx, [BLINKY_WAIT]
+      sub	ax, bx
+      bmi	Pinky
       
       mov	ax, #0
       mov	[BLINKY_TIMER], ax
@@ -707,20 +766,51 @@ Blinky:
       mov	ax, [PACMAN_POS_Y]
       mov	[ENEMY_CHASE_TARGET_Y], ax
       
+      mov	ax, [RAW_PELLETS_EATEN]
+      sub	ax, #196
+      bpl	BlinkyFast
+      
+      jmp	BlinkyMove
+BlinkyFast:
+      sub	ax, #10
+      bpl	BlinkyCruise
+      
+      mov	ax, #ENEMY_FAST_SPEED
+      mov	[BLINKY_WAIT], ax
+      
+      jmp	BlinkyMove
+BlinkyCruise:
+      mov	ax, #ENEMY_CRUISE_SPEED
+      mov	[BLINKY_WAIT], ax
+      
+BlinkyMove:      
+      
       mov	cx, #0
       mov	ex, #BLINKY_POS_X
       mov	fx, @EnemyThink
       jsr	fx
-      
-      jmp	EndLoop
       
 Pinky: 
       mov	ax, [PINKY_TIMER]
       add	ax, #1
       mov	[PINKY_TIMER], ax
       
-      sub	ax, #PINKY_MOVE_SPEED
-      bnz	Inky
+      mov	cx, ax
+      
+      mov	ax, [PINKY_POS_X]
+      mov	bx, [PINKY_POS_Y]
+      
+      jsr	IsTunnel
+      bz	PinkyNormal
+      
+      lsr	cx
+      
+PinkyNormal:  
+      mov	ax, cx      
+      
+      mov	bx, [PINKY_WAIT]
+      sub	ax, bx
+      bmi	Inky
       
       mov	ax, #0
       mov	[PINKY_TIMER], ax
@@ -763,9 +853,6 @@ BugDir:
       
 PinkyMove:
       
-      mov	fx, @FindValidChasePos
-      jsr	fx
-      
       mov	cx, #0
       mov	ex, #PINKY_POS_X
       mov	fx, @EnemyThink
@@ -776,8 +863,23 @@ Inky:
       add	ax, #1
       mov	[INKY_TIMER], ax
       
-      sub	ax, #INKY_MOVE_SPEED
-      bnz	EndLoop
+      mov	cx, ax
+      
+      mov	ax, [INKY_POS_X]
+      mov	bx, [INKY_POS_Y]
+      
+      jsr	IsTunnel
+      bz	InkyNormal
+      
+      lsr	cx
+      
+InkyNormal:  
+      mov	ax, cx
+      
+      mov	bx, [INKY_WAIT]
+      sub	ax, bx
+      bmi	Clyde
+      
       
       mov	ax, #0
       mov	[INKY_TIMER], ax
@@ -825,18 +927,82 @@ InkyCalcTarget:
       
       mov	[ENEMY_CHASE_TARGET_X], ax
       mov	[ENEMY_CHASE_TARGET_Y], bx
-     
-      
-      mov	fx, @FindValidChasePos
-      jsr	fx
-      
       
       mov	cx, #30
       mov	ex, #INKY_POS_X
       mov	fx, @EnemyThink
       jsr	fx
       
-            
+
+Clyde:    
+      mov	ax, [CLYDE_TIMER]
+      add	ax, #1
+      mov	[CLYDE_TIMER], ax
+      
+      mov	cx, ax
+      
+      mov	ax, [CLYDE_POS_X]
+      mov	bx, [CLYDE_POS_Y]
+      
+      jsr	IsTunnel
+      bz	ClydeNormal
+      
+      lsr	cx
+      
+ClydeNormal:  
+      mov	ax, cx
+      
+      mov	bx, [CLYDE_WAIT]
+      sub	ax, bx
+      bmi	EndLoop
+      
+      mov	ax, #0
+      mov	[CLYDE_TIMER], ax
+      
+      mov	ax, #27
+      mov	[ENEMY_SCATTER_TARGET_X], ax
+      
+      mov	ax, #27
+      mov	[ENEMY_SCATTER_TARGET_Y], ax
+      
+      mov	ax, [CLYDE_POS_X]
+      mov	bx, [PACMAN_POS_X]
+      sub	ax, bx
+      
+      jsr	Square
+      mov	ax, cx
+      
+      mov	ax, [CLYDE_POS_Y]
+      mov	bx, [PACMAN_POS_Y]
+      sub	ax, bx
+      jsr	Square
+      add	cx, ax
+      
+      sub	cx, #64
+      bpl	ClydeFar
+      
+      mov	ax, #27
+      mov	[ENEMY_CHASE_TARGET_X], ax
+      
+      mov	ax, #27
+      mov	[ENEMY_CHASE_TARGET_Y], ax
+      
+      jmp	ClydeMove
+      
+ClydeFar: 
+      
+      mov	ax, [PACMAN_POS_X]
+      mov	[ENEMY_CHASE_TARGET_X], ax
+      
+      mov	ax, [PACMAN_POS_Y]
+      mov	[ENEMY_CHASE_TARGET_Y], ax
+      
+ClydeMove:
+      
+      mov	cx, #60
+      mov	ex, #CLYDE_POS_X
+      mov	fx, @EnemyThink
+      jsr	fx      
       
       
 EndLoop:      
@@ -845,150 +1011,91 @@ EndLoop:
       
       
 ; Character logic
-      
-FindValidChasePos:
-      
-      
-      mov	cx, [ENEMY_CHASE_TARGET_X]
-      mov	dx, [ENEMY_CHASE_TARGET_Y]
-      
-      mov	ex, cx ; Check X on boundary
-      sub	ex, #1
-      bpl	CheckNext
-      
-      mov	cx, #2
-      jmp	StartMainCheck
-      
-CheckNext: 
-      mov	ex, cx
-      sub	ex, #28
-      bmi	CheckNext1
-      
-      mov	cx, #27
-      jmp	StartMainCheck
- 
-CheckNext1:       
-      mov	ex, dx ; Check Y on boundary
-      sub	ex, #1
-      bpl	CheckNext2
-      
-      mov	dx, #2
-      jmp	StartMainCheck
-      
-CheckNext2:      
-      mov	ex, dx
-      sub	ex, #28
-      bmi	StartMainCheck
-      
-      
-      
-      mov	dx, #27
-      
-StartMainCheck: 
-      
-      
-      mov	ax, cx
-      mov	bx, dx
-      
-      mov	ex, @$fffe
-      mov	fx, @$fffe
-      
-CheckCurrentPos:
-      
-      
-      push	ax
-      push	bx
-      
-      push	ex
-      push	fx
-      
-      mov	fx, @IsValid
-      jsr	fx
-      
-      pop	fx
-      pop	ex
-      
-      add	ax, #0
-      bnz	ItsValid
-      
-      pop	bx
-      pop	ax
-      
-      add	ex, #1
-      push	ex
-      sub	ex, #2
-      bz	IncY
-      pop	ex
-      jmp	PrepForNext
-      
-IncY:  
-      pop	ex
-      mov	ex, @$fffe
-      add	fx, #1
-      push	fx
-      sub	fx, #2
-      bz	NotFound
-      pop	fx
-      
-PrepForNext:   
-      mov	ax, cx
-      mov	bx, dx
-      
-      add	ax, ex
-      add	bx, fx
-      jmp	CheckCurrentPos
-      
-NotFound: 
-      pop	fx
-      rts
-      
-ItsValid:  
-      pop	bx
-      pop	ax
-      
-      
-      mov	[ENEMY_CHASE_TARGET_X], ax
-      mov	[ENEMY_CHASE_TARGET_Y], bx
-      
-      rts
+
       
 ; cx - score goal      
 ; ex - current enemy index   
 EnemyThink:
-      
-      jmp	Chase
-      
-      mov	ax, [RAW_PELLETS_EATEN]
-      sub	ax, cx
-      bmi	SleepMode
-      
       mov	ax, [ex+4]
+      mov	bx, ax
+      and	bx, #AI_AT_HOME
+      
+      bnz	AtHome
+      and	ax, #7
+      
       bz	Chase
       sub	ax, #1
       bz	Scatter
-      sub	ax, #2
+      sub	ax, #1
       bz	Frightened
       sub	ax, #1
       bz	Respawn
+      sub	ax, #1
+      bz	ExitHouse
       rts
       
-SleepMode:
       
-      mov	ax, [ex+4]
-      sub	ax, #3
-      bnz	CantMove
+ExitHouse:   
+      mov	ax, [ex]
+      sub	ax, #14
+      bnz	ExitCorrectX
+      
+      mov	bx, ex
+      inc	bx
+      
+      mov	ax, [bx]
+      sub	ax, #1
+      mov	[bx], ax
+      
+      inc	bx
+      mov	dx, #0
+      mov	[bx], dx
+      
+      sub	ax, #12
+      bz	StartScatter
+      rts
+      
+ExitCorrectX:   
+      mov	ax, #14
+      mov	[ex], ax
+      rts
+      
+      
+AtHome:
+      mov	bx, [RAW_PELLETS_EATEN]
+      sub	bx, cx
+      bpl	StartExitHouse
       
       
       mov	bx, ex
       add	bx, #5
+      
+      and	ax, #7
+      sub	ax, #AI_FRIGHTENED
+      bnz	MoveInHome
       
       mov 	ax, [bx]
       add	ax, #1
       mov	[bx], ax
       
       sub	ax, #12
-      bz	StopScatter 
+      bz	StopFrightened
+     
+MoveInHome:
+      push	ex
       
+      mov	ax, [ex+2]
+      mov	bx, ex
+      jsr	TryMove
+      pop	ex
+      
+      add	ax, #0
+      bz	HomeReverse
+      
+      rts      
+      
+HomeReverse: 
+      jsr	ReverseMove
       rts
 
 Scatter: 
@@ -1005,9 +1112,6 @@ Scatter:
       mov	ax, [ENEMY_SCATTER_TARGET_X]
       mov	bx, [ENEMY_SCATTER_TARGET_Y]
       
-      mov	cx, [ex]
-      mov	dx, [ex+1]
-      
       jmp	Movement
         
 Chase:    
@@ -1019,32 +1123,12 @@ Chase:
       mov	[bx], ax
       
       sub	ax, #60
-      bz	StopChase     
+      bz	StopChase 
       
       mov	ax, [ENEMY_CHASE_TARGET_X]
       mov	bx, [ENEMY_CHASE_TARGET_Y]
-      
-      push	ex
-      
-      mov	fx, @IsValid
-      jsr	fx
-      
-      pop	ex
-      
-      add	ax, #0
-      bz	CantMove
-      
-      mov	ax, [ENEMY_CHASE_TARGET_X]
-      mov	bx, [ENEMY_CHASE_TARGET_Y]
-      
-      mov	cx, [ex]
-      mov	dx, [ex+1]
       
       jmp	Movement
-      
-CantMove: 
-      rts      
-      
       
       
 Frightened:       
@@ -1061,7 +1145,6 @@ Frightened:
       jmp	RandomDirection
 
 Respawn:
-      
       mov	cx, [ex]
       sub	cx, #15
       bnz	GoToRespawn
@@ -1070,52 +1153,93 @@ Respawn:
       sub	dx, #12
       bnz	GoToRespawn
       
+      mov	ax, #ENEMY_MOVE_SPEED
+      mov	bx, ex
+      add	bx, #6
+      mov	[bx], ax
       
-      jmp	StopFrightened
+      jmp	StartScatter
       
 GoToRespawn:     
       mov	ax, #15
       mov	bx, #12
       
-      mov	cx, [ex]
-      mov	dx, [ex+1]
-      
       jmp	Movement
+
+StartExitHouse:
+      
+      mov	ax, #AI_EXIT_HOME
+      jsr	UpdateMode
+      rts
+      
+StartFrightened:
+      mov	ax, [ex+4]
+      sub	ax, #AI_DEAD
+      bz	DeadDoNotFear
+      
+      mov	ax, [ex+4]
+      sub	ax, #AI_EXIT_HOME
+      bz	DeadDoNotFear
+      
+      mov	ax, [ex+4]
+      and	ax, #AI_AT_HOME
+      add	ax, #AI_FRIGHTENED
+      jsr	UpdateMode
+      rts  
+      
+StartRespawn:
+      
+      mov	ax, #ENEMY_DEAD_MOVE_SPEED
+      mov	bx, ex
+      add	bx, #6
+      mov	[bx], ax
+      
+      mov	ax, #AI_DEAD
+      jsr	UpdateMode
+      rts
+      
+DeadDoNotFear:      
+      rts
       
 StopFrightened:      
       mov	ax, #PACMAN_MOVE_SPEED
       mov	[PACMAN_WAIT], ax
-      jmp	UpdateMode
+      
+      mov	ax, [ex+4]
+      and	ax, #AI_AT_HOME
+      add	ax, #AI_CHASE
+      
+      jsr	UpdateMode
+      rts  
       
 StopScatter:
-      mov	fx, @ReverseMove
-      jsr	fx	
+      jsr	ReverseMove	
+      
+      mov	ax, #AI_CHASE
+      jsr	UpdateMode
+      rts
+      
+StopChase:  
+      jsr	ReverseMove
+      
+StartScatter:
+
+      mov	ax, #AI_SCATTER
+      jsr	UpdateMode  
+      rts
+      
       
 UpdateMode:      
       mov	bx, ex
       add	bx, #4
       
-      mov	ax, #0
-      mov	[bx], ax
+      mov	[bx], ax ; AI_MODE
+      
       inc	bx
-      mov	[bx], ax
+      mov	ax, #0
+      mov	[bx], ax ; AI_TIMER
       rts
-      
-      
-StopChase:  
-      mov	fx, @ReverseMove
-      jsr	fx
-      
-      mov	bx, ex
-      add	bx, #4
-      
-      mov	ax, #1
-      mov	[bx], ax
-      
-      inc	bx
-      mov	ax, #0
-      mov	[bx], ax
-      rts          
+          
       
 ReverseMove:
       mov	bx, ex
@@ -1128,79 +1252,11 @@ ReverseMove:
       rts
       
 Movement:
-      push	ax
-      
-      sub	ax, cx
-      bnz	AINotZero
-      
-      mov	ax, bx
-      sub	ax, dx
-      bnz	AINotZero
-      
-      pop	ax
-      jmp	RandomDirection
-      
-AINotZero: 
-      
-      pop	ax
-      push	ax
-      
-      
-      push	bx
-      push	cx
-      push	dx
-      push	ex
-      
-      mov	fx, @GetPath
-      jsr	fx
-      
-      
-      mov	cx, ax
-      sub	cx, #4
-      bz	Reroute
-      
-      pop	cx
-      pop	cx
-      pop	cx
-      pop	cx
-      pop	cx
+      jsr	GetPath
       
       mov	bx, ex
-      mov	fx, @CharLogic
-      jsr	fx
+      jsr	CharLogic
       rts
-      
-Reroute:
-      
-      mov	ax, ex
-      mov	[CURRENT_CHARACTER], ax
-      
-      mov	ax, [ex]
-      mov	bx, [ex+1]
-      
-      ;mov	fx, @FindBFS
-      ;jsr	fx
-      
-      pop	ex
-      pop	dx
-      pop	cx
-      pop	bx
-      pop	ax
-      
-      mov	fx, @GetPath
-      jsr	fx
-      
-      
-      mov	cx, ax
-      sub	cx, #4
-      bz	RandomDirection
-      
-      mov	bx, ex
-      mov	fx, @CharLogic
-      jsr	fx
-      rts
-      
-      rts 
            
 RandomDirection:
       rng	ax
@@ -1216,11 +1272,11 @@ RandomDirection:
       bz	RandomDirection
       
       mov	bx, ex
-      mov	fx, @CharLogic
-      jsr	fx
+      jsr	CharLogic
       rts
        
-      
+
+; PAC-MAN control logic      
       
 PacmanThink:
       
@@ -1232,16 +1288,16 @@ PacmanThink:
       mov	ax, [PLAYER_ROT]
       mov	bx, #PACMAN_POS_X
       
-      mov	dx, @CharLogic
-      jsr	dx
+      jsr	CharLogic
       
       mov	ax, #BLINKY_POS_X
-      mov	fx, @TestCollision
-      jsr	fx
+      jsr	TestCollision
       
       mov	ax, #PINKY_POS_X
-      mov	fx, @TestCollision
-      jsr	fx
+      jsr	TestCollision
+      
+      mov	ax, #INKY_POS_X
+      jsr	TestCollision
       
       mov	ax, [PACMAN_POS_X]
       mov	bx, [PACMAN_POS_Y]
@@ -1277,17 +1333,17 @@ Energizer:
       add	ax, #5
       mov	[SCORE], ax
       
-      mov	ax, #3
-      mov	[BLINKY_AI], ax
-      mov	[PINKY_AI], ax
-      mov	[INKY_AI], ax
-      mov	[CLYDE_AI], ax
+      mov	ex, #BLINKY_POS_X
+      jsr	StartFrightened
       
-      mov	ax, #0
-      mov	[BLINKY_AI_TIMER], ax
-      mov	[PINKY_AI_TIMER], ax
-      mov	[INKY_AI_TIMER], ax
-      mov	[CLYDE_AI_TIMER], ax
+      mov	ex, #PINKY_POS_X
+      jsr	StartFrightened
+      
+      mov	ex, #INKY_POS_X
+      jsr	StartFrightened
+      
+      mov	ex, #CLYDE_POS_X
+      jsr	StartFrightened
       
       mov	ax, #20
       mov	[CURRENT_KILL_SCORE], ax
@@ -1295,10 +1351,9 @@ Energizer:
       mov	ax, #PACMAN_ENERIZE_MOVE_SPEED
       mov	[PACMAN_WAIT], ax
       
-DisplayScore:      
+DisplayScore:    
       mov	ax, [SCORE]
-      mov	fx, @ToDecimal
-      jsr	fx
+      jsr	ToDecimal
       
       rts
 
@@ -1310,8 +1365,7 @@ TestCollision:
       mov	bx, [cx] ; X POS
       sub	ax, bx
       
-      mov	dx, @Abs
-      jsr	dx
+      jsr	Abs
       sub	ax, #2
       
       bpl	NoCollision
@@ -1320,15 +1374,14 @@ TestCollision:
       mov	bx, [cx+1] ; Y POS
       sub	ax, bx
       
-      mov	dx, @Abs
-      jsr	dx
+      jsr	Abs
       sub	ax, #2
       
       bpl	NoCollision
       
       
       mov	ax, [cx+4] ; AI STATE
-      sub	ax, #3
+      sub	ax, #AI_FRIGHTENED
       bz	KillGhost
       sub	ax, #1
       bz	NoCollision
@@ -1345,15 +1398,8 @@ TestCollision:
       
 KillGhost:  
       
-      mov	bx, cx
-      add	bx, #4
-      
-      mov	ax, #4
-      mov	[bx], ax ; AI STATE
-      
-      mov	ax, #0
-      inc	bx
-      mov	[bx], ax ; AI TIMER
+      mov	ex, cx
+      jsr	StartRespawn
       
       mov	bx, [CURRENT_KILL_SCORE]
       
@@ -1364,13 +1410,19 @@ KillGhost:
       asl	bx
       mov	[CURRENT_KILL_SCORE], bx
       
-      mov	fx, @ToDecimal
-      jsr	fx
+      sub	bx, @320
+      bnz	DisplayNewScore
+      
+      mov	ax, #PACMAN_MOVE_SPEED
+      mov	[PACMAN_WAIT], ax
+      
+DisplayNewScore: 
+      
+      jsr	ToDecimal
       
       
 NoCollision:
       rts
-      
       
 GameOver:
       mov	ax, #3
@@ -1379,18 +1431,116 @@ GameOver:
       halt
       jmp Init
 
-Abs:
+      
+; Movement logic for characters      
+      
+CharLogic: 
+      push	ax
+      push	bx
+      
+      jsr	TryMove
       add	ax, #0
-      bpl	AbsPlus
+      bz	WrongMove
+      pop	bx
+      pop	ax
+      add	bx, #2
       
-      xor	ax, @$ffff
-      add	ax, #1
-      
-AbsPlus:       
+      mov	[bx], ax
       rts
-     
       
-; Functions      
+WrongMove:
+      pop	bx
+      pop	ax
+      
+      mov	ax, [bx+2]
+      
+      jsr	TryMove
+      rts
+      
+TryMove: ; Move character to position
+      push	bx
+      push	bx ; get direction vector
+      jsr	GetVector
+      
+      pop	fx ; Add direction to pos
+      add	ax, [fx]
+      inc 	fx
+      add	bx, [fx]
+      
+      jsr	TestPortals
+      
+      push	ax
+      push	bx
+      
+      jsr	IsValid
+      add	ax, #0
+      bz	WrongRot
+      
+      pop	bx ; Apply new pos
+      pop	ax
+      pop	fx
+      
+      mov	[fx], ax
+      inc	fx
+      mov	[fx], bx
+      mov	ax, #1
+      rts
+      
+WrongRot:
+      pop	ax ; Ignore
+      pop	ax
+      pop	ax
+      mov	ax, #0
+      rts
+      
+TestPortals:
+      mov	ex, bx
+      sub	ex, #$0F
+      bnz	NotPortal
+      
+      mov	ex, ax
+      sub	ex, #2
+      bnz	TestRightPortal
+      
+      add	ax, #$19
+      rts
+      
+TestRightPortal:
+      mov	ex, ax
+      sub	ex, #$1B
+      bnz	NotPortal
+      
+      sub	ax, #$19
+      rts
+      
+NotPortal:
+      rts        
+      
+; Check _if this area is a tunnel
+; ax, bx - pos
+IsTunnel:
+      mov	ex, bx
+      sub	ex, #$0F
+      bnz	NotTunnel
+      
+      mov	ex, ax
+      sub	ex, #7
+      bmi	ItIsATunnel
+      
+      mov	ex, ax
+      sub	ex, #23
+      bpl	ItIsATunnel
+      
+NotTunnel: 
+      mov	ax, #0
+      rts       
+      
+ItIsATunnel: 
+      mov	ax, #0
+      rts 
+      
+      
+; Functions    
 
 ; Convert number to decimal
 ; ax - value      
@@ -1434,8 +1584,7 @@ Ignore:
       asl	dx
       asl	dx
       
-      mov	fx, @ASLN
-      jsr	fx
+      jsr	ASLN
       
       mov	dx, [SCORE_DISP]
       add	dx, cx
@@ -1447,18 +1596,7 @@ Ignore:
       sub	cx, #4
       bnz	RepeatForDigit
       rts
-      
-      
-; Logic shift N times
-; cx - value, dx - times      
-ASLN:
-      add	dx, #0
-      bz	ASLNZero
-      asl	cx
-      dec	dx
-      bnz	ASLN
-ASLNZero:      
-      rts
+    
       
 ; Pathfinding      
       
@@ -1481,68 +1619,56 @@ GetPath:
 DistCheckLoop:      
       push	ax
       
-      mov	bx, [ex+2]
+      mov	bx, [ex+2] ; Check. Can't reverse direction
       add	bx, #2
       and	bx, #3
       
       sub	bx, ax
       bz	IgnoreDirection1
       
-      mov	fx, @GetVector
-      jsr	fx
+      jsr	GetVector
       
       add	ax, [ex]
       inc	ex
       add	bx, [ex]
       dec	ex
       
-      push	ax
+      push	ax ; Check _if target is valid
       
-      mov	fx, @IsValid
-      jsr	fx
+      jsr	IsValid
       
       mov	fx, ax
       pop	ax
       add	fx, #0
       bz	IgnoreDirection1
       
-      sub	ax, cx
+      sub	ax, cx ; Calculate square distance
       sub	bx, dx
-      
       
       push	cx
       push	bx
       
-      
-      mov	fx, @Square
-      jsr	fx
-      
+      jsr	Square
       
       mov	cx, ax
-      
       pop	ax
       
-      mov	fx, @Square
-      jsr	fx
+      jsr	Square
       
-      add	cx, ax
+      add	cx, ax ; X*X + Y*Y
       mov	ax, cx
-      
       
       mov	bx, [ALG_MIN_DIST]
       sub	ax, bx
       bpl	IgnoreDirection
       
-      
-     ; halt
+      ; Set _this direction as current
+     
       mov	[ALG_MIN_DIST], cx
       
       pop	cx
       pop	ax
-      ;halt
       mov	[ALG_MIN_ROT], ax
-      
-      
 
       jmp	NextDirection
       
@@ -1557,397 +1683,25 @@ NextDirection:
       sub	bx, #4
       bnz	DistCheckLoop
       
+      ; Return result
       
       mov	ax, [ALG_MIN_ROT]
       rts
       
-      
-      
-      
-      mov	fx, @EncodePos
-      jsr	fx
-      push	ax
-      
-      mov	ax, cx
-      mov	bx, dx
-
-      mov	fx, @EncodePos
-      jsr	fx
-      mov	bx, ax
-      pop	ax
-      
-      ; ax - target enc pos
-      ; bx - current enc pos
-      
-SearchLoop: 
-      mov	cx, ax ; Get value in map at target pos
-      add	cx, #MAP_START
-      mov	cx, [cx]
-      and	cx, @$3ff
-      
-      bz	Failed
-      
-      ; cx - encoded position from map
-      
-      mov	dx, cx
-      sub	dx, bx
-      bz	PathFound
-      
-      ; set target pos to encoded pos
-      mov	ax, cx
-      jmp	SearchLoop
-      
-PathFound:  
-      ; ax - move dir pos (encoded)
-      ; bx - current pos (encoded)
-      
-      mov	cx, bx ; decode ax
-      mov	fx, @DecodePos
-      jsr	fx
-      push	ax
-      push	bx
-      
-      mov	ax, cx ; decode bx
-      mov	fx, @DecodePos
-      jsr	fx
-      
-      mov	cx, ax
-      mov	dx, bx
-      
-      pop	bx
-      pop	ax
-      
-      ; ax, bx - move dir pos
-      ; cx, dx - current pos
-      
-      sub	ax, cx
-      sub	bx, dx
-      
-      
-      mov	fx, @GetRotFromVector
-      jsr	fx
-      rts
- 
-Failed:  
-      mov	ax, #4
-      rts
-      
-         ; Compute BFS of the map
-FindBFS: ; ax, bx - start pos
-      push	ax
-      push	bx
-      
-      mov	fx, @InitQueue
-      jsr	fx
-      
-      mov	fx, @MapClear
-      jsr	fx
-      
-      pop	bx
-      pop	ax
-      mov	fx, @EncodePos
-      jsr	fx
-      mov	fx, @Enqueue
-      jsr	fx
-      
-      
-      
-BFSLoop:
-
-      mov	fx, @IsEmpty
-      jsr	fx
-      add	ax, #0
-      bnz	EndBFS
-      
-      mov	fx, @Dequeue
-      jsr	fx
-      mov	cx, ax
-      
-      mov	fx, @IsVisited
-      jsr	fx
-      add	ax, #0
-      bnz	BFSLoop
-      
-      push	cx
-      mov	ax, cx
-      mov	fx, @DecodePos
-      jsr	fx
-
-      
-      mov	fx, @Neighbors
-      jsr	fx
-      
-      pop	ax
-      mov	fx, @SetVisited
-      jsr	fx
-      jmp	BFSLoop
-      
-EndBFS:
-      rts
-    
-      
-; Check _if position was not visited and can be reached      
-CheckPos:
-      
-      mov	ex, @TestPortals
-      jsr	ex
-      
-      push	dx
-      push	cx
-      push	bx
-      push	ax
-      
-      mov	cx, ax
-      mov	dx, bx
-      
-      mov	fx, @IsValid ; Check valid
-      jsr	fx
-      add	ax, #0
-      bz	CheckRet
-      
-      mov	fx, @GetBack
-      jsr	fx
-      
-      
-      sub	ax, cx
-      bnz	Add
-      
-      sub	bx, dx
-      bnz	Add
-      
-CheckRet:  
-      pop	ax
-      pop	bx
-      pop	cx
-      pop	dx
-      rts   
-      
-Add:
-      pop	ax
-      pop	bx
-      pop	cx
-      pop	dx
-      
-      mov	fx, @EncodePos
-      jsr	fx
-      
-      push	ax
-      
-      mov	fx, @IsVisited
-      jsr	fx
-      add	ax, #0
-      bnz	AddRet
-      
-      pop	ax
-      
-      mov	fx, @Enqueue
-      jsr	fx
-      
-      push	ax
-      mov	ax, cx
-      mov	bx, dx
-      
-      mov	fx, @EncodePos
-      jsr	fx
-      
-      pop	bx
-      add	bx, #MAP_START
-      mov	[bx], ax
-      rts
-      
-AddRet:
-      pop	ax
-      rts  
-      
-GetBack:
-      mov	ex, [CURRENT_CHARACTER]
-
-      mov	ax, [ex+2]
-      add	ax, #2
-      and	ax, #3
-      mov	fx, @GetVector
-      jsr	fx
-      
-      add	ax, [ex]
-      
-      inc	ex
-      add	bx, [ex]
-      rts      
-      
-           ; Find all Neighbors
-Neighbors: ; ax, bx - start pos
-      mov	cx, ax
-      mov	dx, bx
-      dec	bx
-      
-      mov	fx, @CheckPos
-      jsr	fx
-
-      mov	ax, cx
-      mov	bx, dx
-      dec	ax
-      
-      mov	fx, @CheckPos
-      jsr	fx
-      
-      mov	ax, cx
-      mov	bx, dx
-      inc	bx
-      
-      mov	fx, @CheckPos
-      jsr	fx
-      
-      mov	ax, cx
-      mov	bx, dx
-      inc	ax
-      
-      mov	fx, @CheckPos
-      jsr	fx
-      rts
-
-; ax, bx - vector
-; ax - result
-EncodePos: ; Encode position vector into one value
-      asl	bx
-      asl	bx
-      asl	bx
-      asl	bx
-      asl	bx
-      add	ax, bx
-      rts
-
-; ax - value
-; ax, bx - result      
-DecodePos: ; Decode position value to a vector
-      mov 	bx, ax
-      and	ax, #$1f
-      lsr	bx
-      lsr	bx
-      lsr	bx
-      lsr	bx
-      lsr	bx
-      rts  
-      
-; Map
-      
-.define MAP_START 224
-.define MAP_END 1248
-.define VISITED_FLAG 4096
-      
-MapClear: ; Clear all values in the map area
-      mov	ax, #MAP_START
-      mov	bx, #0
-
-ClearLoop:
-      mov	[ax], bx
-      inc	ax
-      mov	cx, ax
-      sub	cx, @MAP_END
-      bnz	ClearLoop
-      
-      rts
- 
-IsVisited: ; Check if a postion has been visited
-      add	ax, #MAP_START
-      mov	bx, [ax]
-      and 	bx, @VISITED_FLAG
-      bnz	Visited
-      mov	ax, #0
-      rts
-      
-Visited:
-      mov	ax, #1
-      rts
-      
-SetVisited: ; Set position as visited
-      mov	cx, ax
-      add	cx, #MAP_START
-      mov	ax, [cx]
-      or	ax, @VISITED_FLAG
-      mov	[cx], ax
-      rts
-      
-; Queue
-      
-.define QUEUE_START_POS 64
-.define QUEUE_END_POS 65
-      
-.define QUEUE_START 66 
-.define QUEUE_END 194  
-      
-.define QUEUE_MASK 127      
- 
-      
-InitQueue: ; Prepare queue
-      mov	ax, #0
-      mov	[QUEUE_START_POS], ax ; start
-      mov	[QUEUE_END_POS], ax ; end
-      
-      mov	ax, #QUEUE_START
-      mov	bx, #0
-
-QueueClearLoop:
-      mov	[ax], bx
-      inc	ax
-      mov	cx, ax
-      sub	cx, #QUEUE_END
-      bnz	QueueClearLoop
-      
-      rts
-      
-Enqueue: ; Add value to queue
-      mov	bx, [QUEUE_END_POS]
-      add	bx, #QUEUE_START
-      mov	[bx], ax
-      sub	bx, #QUEUE_START
-      add	bx, #1
-      and	bx, #QUEUE_MASK
-      mov	[QUEUE_END_POS], bx
-      rts
-      
-Dequeue: ; Remove value from queue
-      mov	ax, [QUEUE_START_POS]
-      add	ax, #QUEUE_START
-      mov	bx, [ax]
-      sub	ax, #QUEUE_START
-      add	ax, #1
-      and	ax, #QUEUE_MASK
-      mov	[QUEUE_START_POS], ax
-      mov	ax, bx
-      rts
-      
-IsEmpty: ; Check if queue has any values stored
-      mov	ax, [QUEUE_START_POS]
-      mov	bx, [QUEUE_END_POS]
-      sub	ax, bx
-      bz	RetZero
-      mov	ax, #0
-      rts
-RetZero:
-      mov	ax, #1
-      rts
-  
-  
-; multiply
+; Square of a number
 
 ; ax - number    
 Square:
       push	cx
+      push	dx
       
-      mov	fx, @Abs
-      jsr	fx
+      jsr	Abs
       
-      mov	bx, ax
+      mov	cx, ax
+      mov	dx, #8
       
-      asl	bx
-      asl	bx
-      asl	bx
-      asl	bx
-      
-      asl	bx
-      asl	bx
-      asl	bx
-      asl	bx
+      jsr	ASLN
+      mov	bx, cx
       
       mov	cx, #8
       lsr	ax
@@ -1960,97 +1714,38 @@ DontAddSecond:
       ror	ax
       dec	cx
       bnz	MulLoop
+      
+      pop	dx
       pop	cx
       rts
+
+; Absolute value of a number
       
-CharLogic: ; Movement logic for characters
-      push	ax
-      push	bx
-      
-      mov	dx, @TryMove
-      jsr	dx
+Abs:
       add	ax, #0
-      bz	WrongMove
-      pop	bx
-      pop	ax
-      add	bx, #2
+      bpl	AbsPlus
       
-      mov	[bx], ax
-      rts
+      xor	ax, @$ffff
+      add	ax, #1
       
-WrongMove:
-      pop	bx
-      pop	ax
+AbsPlus:       
+      rts 
       
-      mov	ax, [bx+2]
+; Logic shift N times
+; cx - value, dx - times      
+ASLN:
+      add	dx, #0
+      bz	ASLNZero
+      asl	cx
+      dec	dx
+      bnz	ASLN
+ASLNZero:      
+      rts  
       
-      mov	dx, @TryMove
-      jsr	dx
-      rts
-      
-TryMove: ; Move character to position
-      push	bx
-      push	bx ; get direction vector
-      mov	dx, @GetVector
-      jsr	dx
-      
-      pop	fx ; Add direction to pos
-      add	ax, [fx]
-      inc 	fx
-      add	bx, [fx]
-      
-      mov	dx, @TestPortals
-      jsr	dx
-      
-      push	ax
-      push	bx
-      
-      mov	fx, @IsValid ; Check valid
-      jsr	fx
-      add	ax, #0
-      bz	WrongRot
-      
-      pop	bx ; Apply new pos
-      pop	ax
-      pop	fx
-      
-      mov	[fx], ax
-      inc	fx
-      mov	[fx], bx
-      mov	ax, #1
-      rts
- WrongRot:
-      pop	ax ; Ignore
-      pop	ax
-      pop	ax
-      mov	ax, #0
-      rts
-      
-TestPortals:
-      mov	ex, bx
-      sub	ex, #$0F
-      bnz	NotPortal
-      
-      mov	ex, ax
-      sub	ex, #2
-      bnz	TestRightPortal
-      
-      add	ax, #$19
-      rts
-      
-TestRightPortal:
-      mov	ex, ax
-      sub	ex, #$1B
-      bnz	NotPortal
-      
-      sub	ax, #$19
-      rts
-      
-NotPortal:
-      rts      
+; Check _if character can enter this position
 
 ; ax, bx - position      
-IsValid: ; Check _if character can enter this position
+IsValid:
       push	fx
       push	ex
   
@@ -2069,37 +1764,43 @@ IsValid: ; Check _if character can enter this position
       mov	ex, [MAP_DATA]
       bnz	NotValid
       
+      mov	ex, [CURRENT_CHARACTER]
+      mov	fx, [ex+4]
+      sub	fx, #AI_DEAD
+      bz	RetIsValid
+      
       mov	fx, #CHARACTER_ARRAY
 
 RepeatCharCheck:      
       mov	ex, fx
       sub	ex, [CURRENT_CHARACTER]
-      bz	RetIsValid
+      bz	CheckNextChar
       
       mov	ex, [fx]
       mov	ex, [ex+4] ; AI STATE
-      sub	ex, #4
-      bz	RetIsValid
+      sub	ex, #AI_DEAD
+      bz	CheckNextChar
       
       mov	ex, [fx]
       mov	ex, [ex]
       sub	ex, ax
-      bnz	RetIsValid
+      bnz	CheckNextChar
       
       mov	ex, [fx]
       mov	ex, [ex+1]
       sub	ex, bx
-      bnz	RetIsValid
+      bnz	CheckNextChar
       
       jmp	NotValid
       
-RetIsValid: 
+CheckNextChar: 
       inc	fx
       mov	ex, fx
       sub	ex, #CHARACTER_ARRAY
       sub	ex, #4
       bnz	RepeatCharCheck
-      
+
+RetIsValid:      
       mov	ax, #1
       pop	ex
       pop	fx
@@ -2114,8 +1815,7 @@ GetRotFromVector:
       push	cx
       push	dx
       
-      mov	fx, @EnsureNormalized
-      jsr	fx
+      jsr	EnsureNormalized
       
       pop	dx
       pop	cx
@@ -2172,8 +1872,10 @@ YPlus:
       
 Valid:
       rts
+
+; Calculate vector representing rotation value
       
-GetVector: ; Calculate vector representing rotation value
+GetVector:
       mov	bx, ax
       and	bx, #1 ;Check axis
       bnz	NotZero

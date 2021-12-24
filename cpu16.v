@@ -66,7 +66,7 @@ endmodule
 01001aaa #####bbb	load [B+#] -> A
 01010aaa #####bbb	store A -> [B+#]
 01101aaa 0++++000	store A -> A+[imm16]
-01110aaa 00cccbbb	store A -> [B], C -> IP
+0111raaa 00cccbbb	store IP -> [SP], A -> IP, SP--
 1000tttt ########	conditional branch
 */
 
@@ -141,6 +141,7 @@ module CPU16(clk, reset, busy,
       state <= S_RESET;
       busy <= 1;
       hold <= 0;
+      enableSteps <= 0;
     end else begin
       case (state)
         // state 0: reset
@@ -224,6 +225,8 @@ module CPU16(clk, reset, busy,
               state <= S_SELECT;
               if (data_in[2:0] == SP)
                 regs[SP] <= regs[SP] - 1;
+              if (enableSteps)
+              	hold <= 1;
             end
             //  01011aaa0++++000	operation A+[imm16] -> A
             16'b01011????????000: begin
@@ -231,15 +234,16 @@ module CPU16(clk, reset, busy,
               regs[IP] <= regs[IP] + 1;
               aluop <= data_in[6:3];
             end
-            //  01110aaa00cccbbb	store A -> [B], C -> IP
-            16'b01110???00??????: begin
-              address <= regs[data_in[2:0]];
-              data_out <= regs[data_in[10:8]];
+            //  0111raaa00cccbbb	store IP -> [SP], A -> IP, SP--
+            16'b0111????????????: begin
+              address <= regs[SP];
+              data_out <= regs[IP];
               write <= 1;
               state <= S_SELECT;
-              if (data_in[2:0] == SP)
-                regs[SP] <= regs[SP] - 1;
-              regs[IP] <= regs[data_in[5:3]];
+              regs[SP] <= regs[SP] - 1;
+              regs[IP] <= data_in[11] ? regs[IP] + 16'($signed(data_in[10:0])) : regs[data_in[10:8]];
+              if (enableSteps)
+              	hold <= 1;
             end
             //  10010??????????c	set/clear carry
             16'b10010???????????: begin
