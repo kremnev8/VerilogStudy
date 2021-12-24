@@ -626,7 +626,7 @@ Init:
       
 Start:
       mov	sp, @$2fff
-      mov	ax, @1
+      mov	ax, @80
       mov	[START_TIMER], ax
       
       mov	bx, #15
@@ -1299,6 +1299,9 @@ PacmanThink:
       mov	ax, #INKY_POS_X
       jsr	TestCollision
       
+      mov	ax, #CLYDE_POS_X
+      jsr	TestCollision
+      
       mov	ax, [PACMAN_POS_X]
       mov	bx, [PACMAN_POS_Y]
       
@@ -1394,6 +1397,23 @@ TestCollision:
       mov	[PACMAN_LIFES], ax
       
       bz	GameOver
+      
+      mov	ax, @50
+      mov	[START_TIMER], ax
+      
+DeathWait:
+      mov	ax, [FRAME_SYNC]
+      sub	ax, #1
+      bnz	DeathWait
+      mov	[FRAME_SYNC], ax
+      
+      mov	ax, [START_TIMER]
+      sub	ax, #1
+      mov	[START_TIMER], ax
+      
+      bnz	DeathWait     
+      
+      
       jmp	Start
       
 KillGhost:  
@@ -1419,6 +1439,21 @@ KillGhost:
 DisplayNewScore: 
       
       jsr	ToDecimal
+      
+      mov	ax, @30
+      mov	[START_TIMER], ax
+      
+KillWait:
+      mov	ax, [FRAME_SYNC]
+      sub	ax, #1
+      bnz	KillWait
+      mov	[FRAME_SYNC], ax
+      
+      mov	ax, [START_TIMER]
+      sub	ax, #1
+      mov	[START_TIMER], ax
+      
+      bnz	KillWait
       
       
 NoCollision:
@@ -1764,41 +1799,6 @@ IsValid:
       mov	ex, [MAP_DATA]
       bnz	NotValid
       
-      mov	ex, [CURRENT_CHARACTER]
-      mov	fx, [ex+4]
-      sub	fx, #AI_DEAD
-      bz	RetIsValid
-      
-      mov	fx, #CHARACTER_ARRAY
-
-RepeatCharCheck:      
-      mov	ex, fx
-      sub	ex, [CURRENT_CHARACTER]
-      bz	CheckNextChar
-      
-      mov	ex, [fx]
-      mov	ex, [ex+4] ; AI STATE
-      sub	ex, #AI_DEAD
-      bz	CheckNextChar
-      
-      mov	ex, [fx]
-      mov	ex, [ex]
-      sub	ex, ax
-      bnz	CheckNextChar
-      
-      mov	ex, [fx]
-      mov	ex, [ex+1]
-      sub	ex, bx
-      bnz	CheckNextChar
-      
-      jmp	NotValid
-      
-CheckNextChar: 
-      inc	fx
-      mov	ex, fx
-      sub	ex, #CHARACTER_ARRAY
-      sub	ex, #4
-      bnz	RepeatCharCheck
 
 RetIsValid:      
       mov	ax, #1
