@@ -267,7 +267,7 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
     .X_OFFSET(70)
   )
   ScoreDisp(
-    .digitData({regs.scoreDisp, 4'd0}), 
+    .digitData({regs.sprite_reg[`SCORE_DISP], 4'd0}), 
     .shpos(hpos), 
     .svpos(vpos), 
     .digit(digitData),
@@ -577,14 +577,26 @@ module pacman_top(clk, reset, hsync, vsync, rgb, keycode, keystrobe);
 .define ALG_MIN_DIST $D8       
 .define ALG_MIN_ROT $D9  
       
+.define HOME_EXIT_TIMER $DA      
+      
       
 .define PACMAN_MOVE_SPEED 8
 .define PACMAN_ENERIZE_MOVE_SPEED 5      
       
-.define ENEMY_MOVE_SPEED 12 
-.define ENEMY_FAST_SPEED 9     
-.define ENEMY_CRUISE_SPEED 7       
-.define ENEMY_DEAD_MOVE_SPEED 3      
+.define ENEMY_MOVE_SPEED 8
+.define ENEMY_FAST_SPEED 7    
+.define ENEMY_CRUISE_SPEED 6      
+.define ENEMY_DEAD_MOVE_SPEED 3
+      
+; set these to fps*time
+
+.define CHASE_TIME 230 ; fps*2*20   
+.define SCATTER_TIME 80 ; fps*2*7
+.define FRIGHTENED_TIME 80; fps*2*7
+
+.define START_WAIT_TIME 80
+.define KILL_WAIT_TIME 30
+.define DEATH_WAIT_TIME 50
       
 .define AI_CHASE 0
 .define AI_SCATTER 1
@@ -626,7 +638,7 @@ Init:
       
 Start:
       mov	sp, @$2fff
-      mov	ax, @80
+      mov	ax, #START_WAIT_TIME
       mov	[START_TIMER], ax
       
       mov	bx, #15
@@ -687,6 +699,9 @@ Start:
       mov	[INKY_AI_TIMER], ax
       mov	[CLYDE_AI_TIMER], ax
       
+      mov	ax, #90
+      mov	[HOME_EXIT_TIMER], ax
+      
 ; Start waiting
       
 StartWait:
@@ -715,6 +730,10 @@ Loop:
       bnz	Loop
       mov	[FRAME_SYNC], ax
       
+      mov	ax, [HOME_EXIT_TIMER]
+      add	ax, #1
+      mov	[HOME_EXIT_TIMER], ax
+      
       mov	ax, [PACMAN_TIMER]
       add	ax, #1
       mov	[PACMAN_TIMER], ax
@@ -728,32 +747,7 @@ Loop:
       mov	fx, @PacmanThink
       jsr	fx
       
-      
-Blinky:    
-      mov	ax, [BLINKY_TIMER]
-      add	ax, #1
-      mov	[BLINKY_TIMER], ax
-      
-      mov	cx, ax
-      
-      mov	ax, [BLINKY_POS_X]
-      mov	bx, [BLINKY_POS_Y]
-      
-      jsr	IsTunnel
-      bz	BlinkyNormal
-      
-      lsr	cx
-      
-BlinkyNormal:  
-      mov	ax, cx
-      
-      mov	bx, [BLINKY_WAIT]
-      sub	ax, bx
-      bmi	Pinky
-      
-      mov	ax, #0
-      mov	[BLINKY_TIMER], ax
-      
+Blinky: 
       mov	ax, #27
       mov	[ENEMY_SCATTER_TARGET_X], ax
       
@@ -791,30 +785,6 @@ BlinkyMove:
       jsr	fx
       
 Pinky: 
-      mov	ax, [PINKY_TIMER]
-      add	ax, #1
-      mov	[PINKY_TIMER], ax
-      
-      mov	cx, ax
-      
-      mov	ax, [PINKY_POS_X]
-      mov	bx, [PINKY_POS_Y]
-      
-      jsr	IsTunnel
-      bz	PinkyNormal
-      
-      lsr	cx
-      
-PinkyNormal:  
-      mov	ax, cx      
-      
-      mov	bx, [PINKY_WAIT]
-      sub	ax, bx
-      bmi	Inky
-      
-      mov	ax, #0
-      mov	[PINKY_TIMER], ax
-      
       mov	ax, #2
       mov	[ENEMY_SCATTER_TARGET_X], ax
       
@@ -859,31 +829,6 @@ PinkyMove:
       jsr	fx
 
 Inky: 
-      mov	ax, [INKY_TIMER]
-      add	ax, #1
-      mov	[INKY_TIMER], ax
-      
-      mov	cx, ax
-      
-      mov	ax, [INKY_POS_X]
-      mov	bx, [INKY_POS_Y]
-      
-      jsr	IsTunnel
-      bz	InkyNormal
-      
-      lsr	cx
-      
-InkyNormal:  
-      mov	ax, cx
-      
-      mov	bx, [INKY_WAIT]
-      sub	ax, bx
-      bmi	Clyde
-      
-      
-      mov	ax, #0
-      mov	[INKY_TIMER], ax
-      
       mov	ax, #2
       mov	[ENEMY_SCATTER_TARGET_X], ax
       
@@ -934,31 +879,7 @@ InkyCalcTarget:
       jsr	fx
       
 
-Clyde:    
-      mov	ax, [CLYDE_TIMER]
-      add	ax, #1
-      mov	[CLYDE_TIMER], ax
-      
-      mov	cx, ax
-      
-      mov	ax, [CLYDE_POS_X]
-      mov	bx, [CLYDE_POS_Y]
-      
-      jsr	IsTunnel
-      bz	ClydeNormal
-      
-      lsr	cx
-      
-ClydeNormal:  
-      mov	ax, cx
-      
-      mov	bx, [CLYDE_WAIT]
-      sub	ax, bx
-      bmi	EndLoop
-      
-      mov	ax, #0
-      mov	[CLYDE_TIMER], ax
-      
+Clyde:  
       mov	ax, #27
       mov	[ENEMY_SCATTER_TARGET_X], ax
       
@@ -1016,6 +937,46 @@ EndLoop:
 ; cx - score goal      
 ; ex - current enemy index   
 EnemyThink:
+      mov	bx, ex
+      add	bx, #3
+      
+      mov	ax, [bx]
+      add	ax, #1
+      mov	[bx], ax
+      
+      and	ax, #3
+      bnz	AIContnue
+      
+      add	bx, #2
+      
+      mov 	ax, [bx]
+      add	ax, #1
+      mov	[bx], ax
+
+AIContnue:      
+      
+      mov	dx, [ex+3]
+      
+      mov	ax, [ex]
+      mov	bx, [ex+1]
+      
+      jsr	IsTunnel
+      bz	NormalSpeed
+      
+      lsr	dx
+      
+NormalSpeed:  
+      mov	ax, dx
+      
+      mov	bx, [ex+6]
+      sub	ax, bx
+      bmi	EnemyWait
+      
+      mov	ax, #0
+      mov	bx, ex
+      add	bx, #3
+      mov	[bx], ax
+      
       mov	ax, [ex+4]
       mov	bx, ax
       and	bx, #AI_AT_HOME
@@ -1032,7 +993,9 @@ EnemyThink:
       bz	Respawn
       sub	ax, #1
       bz	ExitHouse
+EnemyWait:
       rts
+
       
       
 ExitHouse:   
@@ -1065,21 +1028,16 @@ AtHome:
       mov	bx, [RAW_PELLETS_EATEN]
       sub	bx, cx
       bpl	StartExitHouse
-      
-      
-      mov	bx, ex
-      add	bx, #5
-      
+
+DontExitHouse:   
+      mov	ax, [ex+4]
       and	ax, #7
       sub	ax, #AI_FRIGHTENED
       bnz	MoveInHome
       
-      mov 	ax, [bx]
-      add	ax, #1
-      mov	[bx], ax
-      
-      sub	ax, #12
-      bz	StopFrightened
+      mov 	ax, [ex+5]
+      sub	ax, @FRIGHTENED_TIME
+      bpl	StopFrightened
      
 MoveInHome:
       push	ex
@@ -1099,15 +1057,9 @@ HomeReverse:
       rts
 
 Scatter: 
-      mov	bx, ex
-      add	bx, #5
-      
-      mov 	ax, [bx]
-      add	ax, #1
-      mov	[bx], ax
-      
-      sub	ax, #14
-      bz	StopScatter
+      mov 	ax, [ex+5]
+      sub	ax, @SCATTER_TIME
+      bpl	StopScatter
       
       mov	ax, [ENEMY_SCATTER_TARGET_X]
       mov	bx, [ENEMY_SCATTER_TARGET_Y]
@@ -1115,15 +1067,9 @@ Scatter:
       jmp	Movement
         
 Chase:    
-      mov	bx, ex
-      add	bx, #5
-      
-      mov 	ax, [bx]
-      add	ax, #1
-      mov	[bx], ax
-      
-      sub	ax, #60
-      bz	StopChase 
+      mov 	ax, [ex+5]
+      sub	ax, @CHASE_TIME
+      bpl	StopChase 
       
       mov	ax, [ENEMY_CHASE_TARGET_X]
       mov	bx, [ENEMY_CHASE_TARGET_Y]
@@ -1132,15 +1078,9 @@ Chase:
       
       
 Frightened:       
-      mov	bx, ex
-      add	bx, #5
-      
-      mov 	ax, [bx]
-      add	ax, #1
-      mov	[bx], ax
-      
-      sub	ax, #12
-      bz	StopFrightened 
+      mov 	ax, [ex+5]
+      sub	ax, @FRIGHTENED_TIME
+      bpl	StopFrightened 
       
       jmp	RandomDirection
 
@@ -1168,9 +1108,38 @@ GoToRespawn:
 
 StartExitHouse:
       
+      mov	ax, [HOME_EXIT_TIMER]
+      sub	ax, #100
+      bmi	DontExitHouse
+      
+      mov	ax, #PINKY_POS_X
+      sub	ax, ex
+      bz	ThenExit
+      
+CheckPinky:
+      mov	ax, [PINKY_AI]
+      sub	ax, #AI_AT_HOME
+      bz	DontExitHouse
+      
+AmIinky:   
+      mov	ax, #INKY_POS_X
+      sub	ax, ex
+      bz	ThenExit
+      
+CheckInky:  
+      mov	ax, [INKY_AI]
+      sub	ax, #AI_AT_HOME
+      bz	DontExitHouse
+      
+ThenExit:      
+      mov	ax, #0
+      mov	[HOME_EXIT_TIMER], ax
+      
       mov	ax, #AI_EXIT_HOME
       jsr	UpdateMode
       rts
+      
+      
       
 StartFrightened:
       mov	ax, [ex+4]
@@ -1398,7 +1367,7 @@ TestCollision:
       
       bz	GameOver
       
-      mov	ax, @50
+      mov	ax, @DEATH_WAIT_TIME
       mov	[START_TIMER], ax
       
 DeathWait:
@@ -1440,7 +1409,7 @@ DisplayNewScore:
       
       jsr	ToDecimal
       
-      mov	ax, @30
+      mov	ax, @KILL_WAIT_TIME
       mov	[START_TIMER], ax
       
 KillWait:
@@ -1554,6 +1523,7 @@ NotPortal:
 ; Check _if this area is a tunnel
 ; ax, bx - pos
 IsTunnel:
+      push	ex
       mov	ex, bx
       sub	ex, #$0F
       bnz	NotTunnel
@@ -1568,10 +1538,12 @@ IsTunnel:
       
 NotTunnel: 
       mov	ax, #0
+      pop	ex
       rts       
       
 ItIsATunnel: 
       mov	ax, #0
+      pop	ex
       rts 
       
       

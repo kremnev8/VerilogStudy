@@ -8,6 +8,8 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos, aiState, aiTime
   
   parameter WAIT_FRAME_TIME = 40 / (60 / `FRAME_RATE);
   
+  parameter FRIGHTENED_BLINK_TIME = `FRAME_RATE * 2 * 4;
+  
   //back, primary, eyes, eyes outer
   
   input clk;
@@ -70,7 +72,7 @@ module Blinky(clk, ce, shpos, svpos, col, direction, xpos, ypos, aiState, aiTime
       else
     	col <= colorMap[colIn*3+:3];
     else begin
-      if (aiTimer <= 8 || animState)
+      if (aiTimer <= FRIGHTENED_BLINK_TIME || animState)
         col <= frightenedColors[infearColIn*3+:3];
       else
         col <= frightened1Colors[infearColIn*3+:3];

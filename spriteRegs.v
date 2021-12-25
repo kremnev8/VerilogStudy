@@ -1,18 +1,14 @@
 
 module SpriteRegs(clk, reset, reg_addr, in,  out, we, mapData, playerRot, frame, pelletData);
  
-  reg [7:0] sprite_reg [0:42];
-  reg [15:0] score;
-  reg [15:0] scoreDisp;
+  reg [15:0] sprite_reg [0:42];
   
   integer k;
   
   initial begin
-    for (k = 0; k < 42; k = k + 1) begin
+    for (k = 0; k < 43; k = k + 1) begin
       sprite_reg[k] = 0;
     end
-    score = 0;
-    scoreDisp = 0;
   end   
   
   
@@ -84,30 +80,18 @@ module SpriteRegs(clk, reset, reg_addr, in,  out, we, mapData, playerRot, frame,
   
   always @(posedge clk) begin
     if (reset) begin
-      for (k = 0; k < 42; k = k + 1) begin
+      for (k = 0; k < 43; k = k + 1) begin
         sprite_reg[k] <= 0;
       end
-      score <= 0;
-      scoreDisp <= 0;
     end else if (we) begin
-      if (reg_addr[5:0] == `SCORE)
-        score <= in;
-      else if (reg_addr[5:0] == `SCORE_DISP)
-        scoreDisp <= in;
-      else
-        sprite_reg[reg_addr[5:0]] <= in[7:0];
+        sprite_reg[reg_addr[5:0]] <= in[15:0];
     end
   end
   
   always @(*) begin
     
     if (reg_addr[5:4] != 2'b11) 
-      if (reg_addr[5:0] == `SCORE)
-        out = score;
-    else if (reg_addr[5:0] == `SCORE_DISP)
-        out = scoreDisp;
-      else
-        out = 16'(sprite_reg[reg_addr[5:0]]);
+        out = sprite_reg[reg_addr[5:0]];
     else begin
       if (reg_addr[3:0] == 4'd0)
         out = 16'(mapData);
